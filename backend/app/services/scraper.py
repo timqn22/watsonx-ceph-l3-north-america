@@ -117,6 +117,9 @@ def sync_redmine(
                         latest_cursor is None or fields["updated_on"] > latest_cursor
                     ):
                         latest_cursor = fields["updated_on"]
+                    if count % 500 == 0:
+                        session.commit()  # durability on long scrapes
+                        logger.info("sync_redmine(%s): %s issues so far", status, count)
             finally:
                 client.close()
         _finish_state(state, cursor=latest_cursor, ok=True, error=None)
@@ -159,6 +162,9 @@ def sync_github(
                         latest_cursor is None or fields["updated_at"] > latest_cursor
                     ):
                         latest_cursor = fields["updated_at"]
+                    if count % 500 == 0:
+                        session.commit()  # durability on long scrapes
+                        logger.info("sync_github(%s): %s pulls so far", pr_state, count)
         finally:
             client.close()
         _finish_state(state, cursor=latest_cursor, ok=True, error=None)

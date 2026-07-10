@@ -30,32 +30,46 @@ def _needs_embedding(model):
     )
 
 
+def _embed_rows(session, embedder, rows, text_fn, label: str) -> int:
+    """Embed a list of rows in batches, logging progress and committing as we go.
+
+    Periodic commits mean a huge run keeps partial progress (and the delta logic
+    resumes from where it stopped) even if interrupted.
+    """
+    n = len(rows)
+    if n:
+        logger.info("refresh_embeddings: %s %s rows to embed", n, label)
+    for i in range(0, n, BATCH):
+        batch = rows[i : i + BATCH]
+        vectors = embedder.embed_texts([text_fn(x) for x in batch])
+        for row, vec in zip(batch, vectors):
+            row.embedding = vec
+            row.embedded_hash = row.content_hash
+        done = min(i + BATCH, n)
+        # Commit + log every ~20 batches so long runs are durable and visible.
+        if (i // BATCH) % 20 == 0 or done == n:
+            session.commit()
+            if n > BATCH:
+                logger.info("refresh_embeddings: %s %s/%s embedded", label, done, n)
+    return n
+
+
 def refresh_embeddings(session: Session, embedder: Embedder | None = None) -> int:
     """Embed all stale issues and PRs. Returns number of rows embedded."""
     embedder = embedder or get_embedder()
-    total = 0
 
     stale_issues = list(session.scalars(select(Issue).where(_needs_embedding(Issue))))
-    for i in range(0, len(stale_issues), BATCH):
-        batch = stale_issues[i : i + BATCH]
-        vectors = embedder.embed_texts(
-            [issue_embed_text(x.subject, x.description) for x in batch]
-        )
-        for row, vec in zip(batch, vectors):
-            row.embedding = vec
-            row.embedded_hash = row.content_hash
-        total += len(batch)
-
     stale_prs = list(
         session.scalars(select(PullRequest).where(_needs_embedding(PullRequest)))
     )
-    for i in range(0, len(stale_prs), BATCH):
-        batch = stale_prs[i : i + BATCH]
-        vectors = embedder.embed_texts([pr_embed_text(x.title, x.body) for x in batch])
-        for row, vec in zip(batch, vectors):
-            row.embedding = vec
-            row.embedded_hash = row.content_hash
-        total += len(batch)
+    total = _embed_rows(
+        session, embedder, stale_issues,
+        lambda x: issue_embed_text(x.subject, x.description), "issues",
+    )
+    total += _embed_rows(
+        session, embedder, stale_prs,
+        lambda x: pr_embed_text(x.title, x.body), "PRs",
+    )
 
     session.commit()
     if total:
