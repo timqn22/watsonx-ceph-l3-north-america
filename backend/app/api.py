@@ -196,17 +196,9 @@ def decide(
     return _enrich(session, s)
 
 
-@router.get("/profiles/me", response_model=ProfileOut)
-def get_profile(session: Session = Depends(get_session)) -> ProfileOut:
-    return ProfileOut.model_validate(get_or_create_profile(session))
-
-
-@router.put("/profiles/me", response_model=ProfileOut)
-def put_profile(
-    body: ProfileIn, session: Session = Depends(get_session)
-) -> ProfileOut:
-    profile = get_or_create_profile(session)
+def _apply_profile(profile, body: ProfileIn) -> None:
     profile.skill_prompt = body.skill_prompt
+    profile.background = body.background
     profile.display_name = body.display_name
     profile.preferred_projects = body.preferred_projects
     profile.preferred_trackers = body.preferred_trackers
@@ -214,16 +206,54 @@ def put_profile(
     # Invalidate the cached embedding; recomputed on next recommendation.
     profile.skill_embedding = None
     profile.skill_embedded_hash = None
+
+
+@router.get("/profiles/me", response_model=ProfileOut)
+def get_profile(session: Session = Depends(get_session)) -> ProfileOut:
+    return ProfileOut.model_validate(get_or_create_profile(session))
+
+
+@router.get("/profiles/{external_id}", response_model=ProfileOut)
+def get_profile_by_id(
+    external_id: str, session: Session = Depends(get_session)
+) -> ProfileOut:
+    return ProfileOut.model_validate(get_or_create_profile(session, external_id))
+
+
+@router.put("/profiles/me", response_model=ProfileOut)
+def put_profile(
+    body: ProfileIn, session: Session = Depends(get_session)
+) -> ProfileOut:
+    profile = get_or_create_profile(session)
+    _apply_profile(profile, body)
     session.commit()
     return ProfileOut.model_validate(profile)
+
+
+@router.put("/profiles/{external_id}", response_model=ProfileOut)
+def put_profile_by_id(
+    external_id: str, body: ProfileIn, session: Session = Depends(get_session)
+) -> ProfileOut:
+    profile = get_or_create_profile(session, external_id)
+    _apply_profile(profile, body)
+    session.commit()
+    return ProfileOut.model_validate(profile)
+
+
+def _effective_prompt(skill: str, background: str | None) -> str:
+    return "\n\n".join(p for p in (skill, background) if p and p.strip()).strip()
 
 
 @router.post("/recommendations/issues", response_model=list[RecommendationOut])
 def recommend(
     body: RecommendIn, session: Session = Depends(get_session)
 ) -> list[RecommendationOut]:
-    profile = get_or_create_profile(session)
-    skill_prompt = body.skill_prompt if body.skill_prompt is not None else profile.skill_prompt
+    profile = get_or_create_profile(session, body.user or "me")
+    if body.skill_prompt is not None:
+        skill_prompt = body.skill_prompt
+    else:
+        # Fold the saved background/previous-projects into the skill text.
+        skill_prompt = _effective_prompt(profile.skill_prompt, profile.background)
     if not skill_prompt.strip():
         raise HTTPException(422, "No skill_prompt provided and no profile saved yet")
 

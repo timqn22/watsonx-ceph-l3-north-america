@@ -78,6 +78,7 @@ class ProfileIn(BaseModel):
     """Create/update a skill profile."""
 
     skill_prompt: str = ""
+    background: str | None = None
     display_name: str | None = None
     preferred_projects: list[str] | None = None
     preferred_trackers: list[str] | None = None
@@ -90,6 +91,7 @@ class ProfileOut(BaseModel):
     external_id: str
     display_name: str | None = None
     skill_prompt: str
+    background: str | None = None
     preferred_projects: list[str] | None = None
     preferred_trackers: list[str] | None = None
     preferred_priorities: list[str] | None = None
@@ -102,6 +104,7 @@ class RecommendIn(BaseModel):
     Filters override the profile's preferences when provided.
     """
 
+    user: str | None = None  # signed-in identity; loads that saved profile
     skill_prompt: str | None = None
     projects: list[str] | None = None
     trackers: list[str] | None = None

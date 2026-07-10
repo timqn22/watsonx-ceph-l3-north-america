@@ -31,12 +31,33 @@ engine = create_engine(settings.database_url, connect_args=_connect_args, future
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
+def _sqlite_add_missing_columns() -> None:
+    """Tiny best-effort migration: add columns introduced after a DB was created.
+
+    Avoids forcing a full re-scrape just to gain a new nullable column. Only
+    runs for SQLite; for other backends use a real migration tool.
+    """
+    if not settings.database_url.startswith("sqlite"):
+        return
+    # (table, column, type) tuples to ensure exist.
+    wanted = [("user_profiles", "background", "TEXT")]
+    with engine.begin() as conn:
+        for table, column, coltype in wanted:
+            rows = conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+            existing = {r[1] for r in rows}
+            if rows and column not in existing:
+                conn.exec_driver_sql(
+                    f"ALTER TABLE {table} ADD COLUMN {column} {coltype}"
+                )
+
+
 def init_db() -> None:
     """Create all tables. Safe to call repeatedly (idempotent)."""
     # Import models so they register on Base.metadata before create_all.
     from . import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _sqlite_add_missing_columns()
 
 
 def get_session() -> Iterator[Session]:

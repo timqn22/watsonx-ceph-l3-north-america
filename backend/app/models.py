@@ -118,6 +118,9 @@ class UserProfile(Base):
     external_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     display_name: Mapped[str | None] = mapped_column(String(255))
     skill_prompt: Mapped[str] = mapped_column(Text, default="")
+    # Free-text background: previous projects / experience, folded into the
+    # embedding alongside skills for richer recommendations.
+    background: Mapped[str | None] = mapped_column(Text)
 
     preferred_projects: Mapped[list[str] | None] = mapped_column(JSON)
     preferred_trackers: Mapped[list[str] | None] = mapped_column(JSON)

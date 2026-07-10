@@ -46,11 +46,15 @@ the stack choices.
 
 - **PR ↔ tracker linkage** (`/dashboard`): scrape → Granite embeddings → ranked
   missing-link suggestions with an Accept/Ignore review queue.
-- **Personalized task recommendations** (`/recommend`): describe your skills,
-  get open issues ranked by fit — same Granite embedder, no extra model.
+- **Personalized task recommendations** (`/recommend`): describe your skills and
+  previous projects, get open issues ranked by fit — same Granite embedder, no
+  extra model. Per-user profiles; already-in-progress work is excluded.
+- **Browser extension** ([`extension/`](./extension)): a Manifest V3 extension
+  that injects both features directly onto Redmine pages — a "Related pull
+  requests" panel on issue pages and a "Recommended for you" panel (with a
+  priority dropdown) on issue listings. No build step; load unpacked.
 
 ## Roadmap
 
-- A Manifest V3 browser extension that overlays these panels directly on Redmine
-  pages.
 - A natural-language "why" for recommendations via a Granite *instruct* model.
+- Configurable Redmine host support in the extension beyond tracker.ceph.com.

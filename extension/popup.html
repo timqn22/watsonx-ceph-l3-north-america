@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { width: 340px; margin: 0; padding: 14px 16px;
+         font: 13px/1.45 -apple-system, Segoe UI, Roboto, sans-serif;
+         background: #0f1115; color: #e7e9ee; }
+  h1 { font-size: 15px; margin: 0 0 2px; }
+  .sub { color: #9aa2b1; font-size: 11px; margin-bottom: 12px; }
+  h2 { font-size: 12px; color: #8b93a3; text-transform: uppercase;
+       letter-spacing: .04em; margin: 14px 0 6px; }
+  label { display: block; color: #9aa2b1; margin: 8px 0 3px; }
+  input, textarea { width: 100%; background: #0f1115; color: #e7e9ee;
+    border: 1px solid #333a47; border-radius: 6px; padding: 7px 9px; font: inherit; }
+  textarea { min-height: 54px; resize: vertical; }
+  .accent { color: #7cc5ff; }
+  button { margin-top: 12px; width: 100%; background: #22304a; color: #e7e9ee;
+    border: 1px solid #33507e; border-radius: 6px; padding: 9px; font-size: 13px;
+    cursor: pointer; }
+  button:hover { background: #2b3d5e; }
+  .status { margin-top: 8px; font-size: 12px; min-height: 16px; }
+  .ok { color: #5fd18b; } .err { color: #f2889a; }
+  hr { border: none; border-top: 1px solid #262a33; margin: 12px 0; }
+</style>
+</head>
+<body>
+  <h1>TrackerAssist</h1>
+  <div class="sub">PR ↔ tracker links + task picks, powered by
+    <span class="accent">Granite</span></div>
+
+  <h2>Connection & sign-in</h2>
+  <label for="backendUrl">Backend URL</label>
+  <input id="backendUrl" placeholder="http://localhost:8000">
+  <label for="userId">Your ID (sign in)</label>
+  <input id="userId" placeholder="e.g. eleson — used to save your profile">
+  <label for="displayName">Display name (optional)</label>
+  <input id="displayName" placeholder="Emily Leson">
+
+  <hr>
+  <h2>Your profile (for recommendations)</h2>
+  <label for="skills">Skills</label>
+  <textarea id="skills" placeholder="Strong in C++ and RBD mirroring, comfortable with RADOS and CephFS, newer to cephadm..."></textarea>
+  <label for="background">Previous projects / experience</label>
+  <textarea id="background" placeholder="Worked on rbd-mirror snapshot sync, fixed OSD recovery bugs, contributed to the dashboard..."></textarea>
+  <label for="projects">Preferred projects (comma-separated)</label>
+  <input id="projects" placeholder="RBD, CephFS">
+  <label for="trackers">Preferred trackers (comma-separated)</label>
+  <input id="trackers" placeholder="Bug, Feature">
+
+  <button id="save">Save profile</button>
+  <div class="status" id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
