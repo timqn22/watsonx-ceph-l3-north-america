@@ -364,7 +364,7 @@ def issues_in_progress(
 
 
 @router.post("/admin/rescrape")
-def rescrape(body: RescrapeIn, background: BackgroundTasks) -> dict[str, str]:
+def rescrape(body: RescrapeIn, background: BackgroundTasks) -> dict[str, str | bool]:
     if body.source not in _VALID_SOURCES:
         raise HTTPException(422, f"source must be one of {sorted(_VALID_SOURCES)}")
     background.add_task(run_source, body.source, body.full)
