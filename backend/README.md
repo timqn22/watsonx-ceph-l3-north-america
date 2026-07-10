@@ -17,9 +17,13 @@ whole flow with **no credentials and no network**:
 
 | Concern    | Real backend                    | Fallback (no creds)                     |
 |------------|---------------------------------|-----------------------------------------|
-| Embeddings | watsonx Granite                 | `sentence-transformers`, then a numpy hash embedder |
+| Embeddings | watsonx Granite (managed)       | **Granite run locally** via `sentence-transformers`, then a numpy hash embedder |
 | Store      | any SQLAlchemy DB               | local SQLite file (default)             |
-| Issues     | Redmine REST API                | ingest the prototype's `raw_issues/*.json` |
+| Issues     | Redmine REST API                | ingest a folder of raw `*.json` issues  |
+
+> **No watsonx account?** `pip install sentence-transformers` and the app runs
+> IBM's open Granite embedding model locally — same model, no API quota. The
+> watsonx SDK path stays available for managed/production hosting.
 
 ## Quick start
 

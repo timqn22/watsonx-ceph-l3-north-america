@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     watsonx_url: str = "https://us-south.ml.cloud.ibm.com"
     watsonx_embed_model_id: str = "ibm/granite-embedding-278m-multilingual"
     embedder_backend: str = "auto"  # auto | watsonx | local | hash
+    # Local (Hugging Face) embedding model used by the LocalEmbedder backend.
+    # Defaults to IBM's open Granite embedding model -- real Granite, no quota.
+    local_embed_model: str = "ibm-granite/granite-embedding-278m-multilingual"
 
     # --- Matching / scheduling ---
     link_min_similarity: float = 0.72

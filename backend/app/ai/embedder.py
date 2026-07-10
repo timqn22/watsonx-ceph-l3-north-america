@@ -96,9 +96,18 @@ class HashEmbedder(_CachingMixin):
 
 
 class LocalEmbedder(_CachingMixin):
-    """sentence-transformers backend for offline dev without watsonx creds."""
+    """Local sentence-transformers backend.
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
+    Defaults to IBM's open **Granite** embedding model pulled from Hugging Face,
+    so you get real Granite semantics with no watsonx account, no API quota, and
+    fully offline after the first download. Point ``LOCAL_EMBED_MODEL`` at any
+    other sentence-transformers model (e.g. ``all-MiniLM-L6-v2`` for a smaller,
+    faster non-Granite option) if you prefer.
+    """
+
+    def __init__(
+        self, model_name: str = "ibm-granite/granite-embedding-278m-multilingual"
+    ) -> None:
         super().__init__()
         from sentence_transformers import SentenceTransformer  # lazy import
 
@@ -158,7 +167,7 @@ def _build_embedder(settings: Settings) -> Embedder:
     if choice == "hash":
         return HashEmbedder()
     if choice == "local":
-        return LocalEmbedder()
+        return LocalEmbedder(settings.local_embed_model)
     if choice == "watsonx":
         return WatsonxGraniteEmbedder(settings)
 
@@ -171,7 +180,7 @@ def _build_embedder(settings: Settings) -> Embedder:
         except Exception as exc:  # SDK missing or bad creds -> degrade gracefully
             logger.warning("watsonx embedder unavailable (%s); falling back", exc)
     try:
-        emb = LocalEmbedder()
+        emb = LocalEmbedder(settings.local_embed_model)
         logger.info("Using local embedder: %s", emb.model_id)
         return emb
     except Exception as exc:

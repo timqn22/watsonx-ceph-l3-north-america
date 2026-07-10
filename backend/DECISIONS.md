@@ -45,6 +45,16 @@ the challenge; noted for "what's next."
 `auto` picks watsonx if credentials are present, else local if installed, else
 hash. All vectors are L2-normalized, so cosine similarity is a dot product.
 
+**Granite without watsonx.** The Granite embedding models are open-source on
+Hugging Face, so `LocalEmbedder` defaults to
+`ibm-granite/granite-embedding-278m-multilingual` and runs the *same model* the
+watsonx path would — locally, free, offline after first download, no API quota.
+This is the recommended setup when watsonx credits are unavailable: you keep the
+"powered by IBM Granite" story, and the watsonx SDK path stays as the
+production/managed-hosting option. The hash embedder remains only for
+tests/first-boot; its match quality is poor (generic tokens like
+`ceph`/`pull`/`requests` collide), which is why real Granite embeddings matter.
+
 Embedding **dimension is not hard-coded** — it's whatever the active model
 emits (Granite embed models are commonly 384/768; the hash fallback is 512).
 Because vectors are stored per-row as JSON and compared pairwise, mixing is
