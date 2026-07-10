@@ -101,6 +101,16 @@
         { class: "ta-tags" },
         el("span", { class: "ta-tag" }, s.state)
       );
+      // Linked from the tracker only -> the PR never referenced this issue.
+      if (linked && s.link_direction === "tracker") {
+        tags.append(
+          el(
+            "span",
+            { class: "ta-tag ta-warn", title: "The tracker links this PR, but the PR body has no 'Fixes:' reference back." },
+            "⚠ PR not linked back"
+          )
+        );
+      }
       body.append(
         el(
           "div",

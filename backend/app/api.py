@@ -304,6 +304,7 @@ def related_prs(
         out.append(
             RelatedPrOut(
                 relationship=r.relationship,
+                link_direction=r.link_direction,
                 similarity=round(r.similarity, 4) if r.similarity is not None else None,
                 confidence=round(r.confidence, 4) if r.confidence is not None else None,
                 pr_number=r.pr.number,
@@ -366,5 +367,5 @@ def issues_in_progress(
 def rescrape(body: RescrapeIn, background: BackgroundTasks) -> dict[str, str]:
     if body.source not in _VALID_SOURCES:
         raise HTTPException(422, f"source must be one of {sorted(_VALID_SOURCES)}")
-    background.add_task(run_source, body.source)
-    return {"status": "scheduled", "source": body.source}
+    background.add_task(run_source, body.source, body.full)
+    return {"status": "scheduled", "source": body.source, "full": body.full}

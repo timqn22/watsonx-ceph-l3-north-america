@@ -54,6 +54,10 @@ class Issue(Base):
     is_open: Mapped[bool] = mapped_column(default=True, index=True)
     url: Mapped[str | None] = mapped_column(String(512))
 
+    # PR numbers this tracker references (from its description / "Pull request
+    # ID" field) -- the tracker -> PR link direction.
+    referenced_pr_numbers: Mapped[list[int] | None] = mapped_column(JSON)
+
     # sha256 of subject+description; drives re-embedding.
     content_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     embedded_hash: Mapped[str | None] = mapped_column(String(64))

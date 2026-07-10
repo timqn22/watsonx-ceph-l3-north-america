@@ -103,6 +103,11 @@ class RelatedPR:
     relationship: str  # "linked" | "suggested"
     similarity: float | None
     confidence: float | None  # calibrated 0..1 for display
+    # For linked PRs: which side records the link.
+    #   "pr"      -> PR body references the tracker
+    #   "tracker" -> tracker references the PR, but the PR does NOT link back
+    #   "both"    -> both sides agree
+    link_direction: str | None = None
 
 
 def calibrate(cosine: float, floor: float) -> float:
@@ -141,13 +146,23 @@ def related_prs_for_issue(
     if floor is None:
         floor = settings.similarity_floor
 
-    # 1) Definite links win outright.
-    linked = [
-        RelatedPR(pr, "linked", None, None)
-        for pr in session.scalars(select(PullRequest))
-        if pr.referenced_issue_ids and issue.id in pr.referenced_issue_ids
-    ]
+    # 1) Definite links win outright -- detected from EITHER side:
+    #    the PR referencing the issue, or the tracker referencing the PR.
+    tracker_pr_nums = set(issue.referenced_pr_numbers or [])
+    linked: list[RelatedPR] = []
+    for pr in session.scalars(select(PullRequest)):
+        pr_links = bool(pr.referenced_issue_ids and issue.id in pr.referenced_issue_ids)
+        tracker_links = pr.number in tracker_pr_nums
+        if not (pr_links or tracker_links):
+            continue
+        direction = "both" if (pr_links and tracker_links) else (
+            "pr" if pr_links else "tracker"
+        )
+        linked.append(RelatedPR(pr, "linked", None, None, direction))
     if linked:
+        # Tracker-only links (PR hasn't back-referenced) surface first as they're
+        # the actionable ones.
+        linked.sort(key=lambda r: r.link_direction != "tracker")
         return linked[:limit]
 
     # 2) Otherwise, the strongest embedding matches above the bar.

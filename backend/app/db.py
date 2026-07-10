@@ -40,7 +40,10 @@ def _sqlite_add_missing_columns() -> None:
     if not settings.database_url.startswith("sqlite"):
         return
     # (table, column, type) tuples to ensure exist.
-    wanted = [("user_profiles", "background", "TEXT")]
+    wanted = [
+        ("user_profiles", "background", "TEXT"),
+        ("issues", "referenced_pr_numbers", "TEXT"),
+    ]
     with engine.begin() as conn:
         for table, column, coltype in wanted:
             rows = conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()

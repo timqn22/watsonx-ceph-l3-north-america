@@ -71,6 +71,35 @@ def test_calibration_removes_baseline():
     assert 0.2 < calibrate(0.77, 0.70) < 0.3
 
 
+def test_tracker_side_link_marks_pr_linked(session):
+    # The tracker references the PR (via its description), but the PR body does
+    # NOT reference the tracker. It should still count as linked, flagged as
+    # tracker-only.
+    session.add(Issue(id=74854, subject="OSD stuff",
+                      description="see https://github.com/ceph/ceph/pull/46912",
+                      is_open=True, referenced_pr_numbers=[46912],
+                      content_hash=content_hash("74854"),
+                      url="https://tracker.ceph.com/issues/74854"))
+    _pr(session, "PR_x", 46912, "some osd fix", "no tracker reference here")
+    session.commit()
+    refresh_embeddings(session)
+
+    rel = related_prs_for_issue(session, session.get(Issue, 74854))
+    assert len(rel) == 1
+    assert rel[0].relationship == "linked"
+    assert rel[0].link_direction == "tracker"  # PR has no back-reference
+    assert rel[0].pr.number == 46912
+
+
+def test_pr_reference_parsing_from_description_and_field():
+    from app.text import parse_referenced_pr_numbers
+
+    desc = "Fixed by https://github.com/ceph/ceph/pull/46912 and see /pull/100"
+    assert parse_referenced_pr_numbers(desc, None) == [46912]
+    cf = [{"name": "Pull request ID", "value": "51234"}]
+    assert parse_referenced_pr_numbers(None, cf) == [51234]
+
+
 def test_similar_unlinked_pr_is_suggested(session):
     _issue(session, 1, "rbd mirror snapshot replayer stuck",
            "the rbd-mirror image replayer hangs during snapshot sync")

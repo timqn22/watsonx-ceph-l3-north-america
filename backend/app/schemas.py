@@ -72,6 +72,7 @@ class RescrapeIn(BaseModel):
     """Body for the admin force-rescrape endpoint."""
 
     source: str  # redmine_open | redmine_closed | github_open | github_closed
+    full: bool = False  # clear the delta cursor and re-fetch everything
 
 
 class ProfileIn(BaseModel):
@@ -131,6 +132,7 @@ class RelatedPrOut(BaseModel):
     """A PR related to an issue, for the issue-page panel."""
 
     relationship: str  # "linked" | "suggested"
+    link_direction: str | None = None  # pr | tracker | both (for linked)
     similarity: float | None = None
     confidence: float | None = None  # calibrated 0..1 for display
     pr_number: int

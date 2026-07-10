@@ -65,6 +65,10 @@
   border: 1px solid #e0e4e8; border-radius: 11px; padding: 1px 8px;
 }
 .ta-stretch { color: #9a6b12; background: #fdf3df; border-color: #efd9a8; }
+.ta-warn { color: #b3541e; background: #fdece0; border-color: #f0c9a8; }
+@media (prefers-color-scheme: dark) {
+  .ta-warn { color: #f0a878; background: #2a1a10; border-color: #6a4020; }
+}
 .ta-actions { display: flex; gap: 6px; flex: 0 0 auto; }
 .ta-relbadge { flex: 0 0 60px; font-size: 11px; font-weight: 600; text-align: center;
   border-radius: 6px; padding: 4px 2px; }

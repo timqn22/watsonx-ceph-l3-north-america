@@ -41,9 +41,21 @@ def run_closed_cycle() -> None:
         refresh_embeddings(session)
 
 
-def run_source(source: str) -> None:
-    """Force a single named source sync (for the admin/demo endpoint)."""
+def run_source(source: str, full: bool = False) -> None:
+    """Force a single named source sync (for the admin/demo endpoint).
+
+    ``full=True`` clears the delta cursor first, so every item is re-fetched and
+    re-normalized (e.g. to backfill a newly added field). Embeddings are only
+    recomputed for rows whose text actually changed, so this stays cheap.
+    """
+    from ..models import ScrapeState
+
     with SessionLocal() as session:
+        if full:
+            st = session.get(ScrapeState, source)
+            if st is not None:
+                st.last_cursor = None
+                session.commit()
         if source == "redmine_open":
             sync_redmine(session, status="open")
         elif source == "redmine_closed":

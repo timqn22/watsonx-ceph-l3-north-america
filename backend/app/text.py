@@ -13,6 +13,8 @@ from typing import Any
 # Ceph's convention is "Fixes: https://tracker.ceph.com/issues/12345", so the
 # URL form is the reliable already-linked signal; the "#id" form is a bonus.
 _ISSUE_REF_RE = re.compile(r"(?:/issues/|#)(\d+)")
+# A GitHub pull request URL, e.g. https://github.com/ceph/ceph/pull/46912
+_PR_URL_RE = re.compile(r"github\.com/[^/\s]+/[^/\s]+/pull/(\d+)")
 
 
 def content_hash(*parts: str | None) -> str:
@@ -47,6 +49,33 @@ def parse_referenced_issue_ids(body: str | None) -> list[int]:
     return list(seen.keys())
 
 
+def parse_referenced_pr_numbers(
+    description: str | None, custom_fields: list[dict[str, Any]] | None
+) -> list[int]:
+    """PR numbers a tracker points at: a GitHub PR URL in the description, or a
+    "Pull request ID" custom field. This is the *tracker -> PR* link direction,
+    which the PR body may not mirror. Deduplicated, order-preserving.
+    """
+    nums: dict[int, None] = {}
+    if description:
+        for m in _PR_URL_RE.findall(description):
+            nums.setdefault(int(m), None)
+    for field in custom_fields or []:
+        value = field.get("value")
+        if not value:
+            continue
+        values = value if isinstance(value, list) else [value]
+        name = (field.get("name") or "").lower()
+        for v in values:
+            v = str(v).strip()
+            for m in _PR_URL_RE.findall(v):
+                nums.setdefault(int(m), None)
+            # A bare number in a pull-request-ish field.
+            if "pull request" in name and v.isdigit():
+                nums.setdefault(int(v), None)
+    return list(nums.keys())
+
+
 def normalize_redmine_issue(raw: dict[str, Any], base_url: str) -> dict[str, Any]:
     """Map a Redmine issue payload to Issue-model kwargs."""
     subject = raw.get("subject", "") or ""
@@ -72,6 +101,9 @@ def normalize_redmine_issue(raw: dict[str, Any], base_url: str) -> dict[str, Any
         "is_open": not is_closed,
         "url": f"{base_url.rstrip('/')}/issues/{raw.get('id')}",
         "content_hash": content_hash(subject, description),
+        "referenced_pr_numbers": parse_referenced_pr_numbers(
+            description, raw.get("custom_fields")
+        ),
     }
 
 
