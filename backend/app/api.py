@@ -20,6 +20,7 @@ from .models import Issue, LinkSuggestion, PullRequest
 from .schemas import (
     DecisionIn,
     HealthOut,
+    InProgressOut,
     IssueOut,
     JobInfo,
     LinkSuggestionOut,
@@ -33,6 +34,7 @@ from .schemas import (
 from .scheduler import get_scheduler
 from .services.pipeline import run_source
 from .services.recommendations import get_or_create_profile, recommend_issues
+from .services.work_status import in_progress_issue_ids, in_progress_map
 
 router = APIRouter()
 
@@ -225,6 +227,7 @@ def recommend(
     if not skill_prompt.strip():
         raise HTTPException(422, "No skill_prompt provided and no profile saved yet")
 
+    exclude = None if body.include_in_progress else in_progress_issue_ids(session)
     recs = recommend_issues(
         session,
         skill_prompt=skill_prompt,
@@ -232,6 +235,7 @@ def recommend(
         trackers=body.trackers or profile.preferred_trackers,
         priorities=body.priorities or profile.preferred_priorities,
         limit=body.limit,
+        exclude_issue_ids=exclude,
     )
 
     out: list[RecommendationOut] = []
@@ -252,6 +256,52 @@ def recommend(
             )
         )
     return out
+
+
+@router.get("/issues/in-progress", response_model=list[InProgressOut])
+def issues_in_progress(
+    unassigned_only: bool = Query(False),
+    limit: int = Query(100, le=500),
+    session: Session = Depends(get_session),
+) -> list[InProgressOut]:
+    """Open issues that already have a PR working on them.
+
+    Set ``unassigned_only=true`` to catch the real pain: work started without
+    anyone assigning the tracker to themselves.
+    """
+    evidence = in_progress_map(session)
+    out: list[InProgressOut] = []
+    for issue_id, ev in evidence.items():
+        issue = session.get(Issue, issue_id)
+        if issue is None:
+            continue
+        unassigned = not issue.assignee_login
+        if unassigned_only and not unassigned:
+            continue
+        out.append(
+            InProgressOut(
+                issue_id=issue_id,
+                subject=issue.subject,
+                issue_url=issue.url,
+                assignee_login=issue.assignee_login,
+                is_unassigned=unassigned,
+                evidence=ev.kind,
+                similarity=round(ev.similarity, 4) if ev.similarity is not None else None,
+                pr_number=ev.pr.number,
+                pr_repo=ev.pr.repo_full_name,
+                pr_title=ev.pr.title,
+                pr_url=ev.pr.url,
+            )
+        )
+    # Unassigned first, then referenced (definite) before matches, then by score.
+    out.sort(
+        key=lambda r: (
+            not r.is_unassigned,
+            r.evidence != "referenced",
+            -(r.similarity or 1.0),
+        )
+    )
+    return out[:limit]
 
 
 @router.post("/admin/rescrape")

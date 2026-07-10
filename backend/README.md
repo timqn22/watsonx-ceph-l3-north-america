@@ -72,6 +72,7 @@ network, no credentials, no model downloads.
 | GET  | `/suggestions/links/for-pr/{id}` | suggested issues for one PR |
 | POST | `/suggestions/links/{id}/decision` | `{status: accepted\|rejected\|ignored}` |
 | POST | `/admin/rescrape` | `{source: redmine_open\|...}` force one cycle (demos) |
+| GET  | `/issues/in-progress?unassigned_only=` | open issues a PR is already working on |
 | GET  | `/dashboard` | manager review queue as a web page (Accept/Ignore, coverage stats) |
 | GET/PUT | `/profiles/me` | read/update the skill profile (Feature B) |
 | POST | `/recommendations/issues` | rank open issues by fit to a skill description |
@@ -83,6 +84,12 @@ Open **http://localhost:8000/dashboard** in a browser: coverage tiles, the
 ranked missing-link queue with Accept/Ignore buttons, a similarity filter, and
 scrape health. Set `DASHBOARD_TOKEN` in `.env` to require `?token=<value>`;
 leave it blank for an open page on localhost.
+
+The dashboard also flags **unassigned issues that already have a PR in flight**
+(someone started without claiming the tracker) — via `#123`/tracker-URL
+references or strong Granite similarity. The same signal is used by the
+recommender below, which never suggests work that's already being done (pass
+`include_in_progress: true` to override).
 
 ### Task recommendations (Feature B)
 

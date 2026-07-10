@@ -77,12 +77,15 @@ def recommend_issues(
     priorities: list[str] | None = None,
     limit: int = 15,
     stretch: int = 2,
+    exclude_issue_ids: set[int] | None = None,
     embedder: Embedder | None = None,
 ) -> list[Recommendation]:
     """Rank open issues by fit to ``skill_prompt``, applying optional filters.
 
     Returns up to ``limit`` picks: the strongest matches, plus up to ``stretch``
     "growth" issues drawn from a mid fit band (marked ``is_stretch``).
+    ``exclude_issue_ids`` drops issues already being worked on so we never
+    recommend taken work.
     """
     embedder = embedder or get_embedder()
     if not skill_prompt.strip():
@@ -100,6 +103,8 @@ def recommend_issues(
         stmt = stmt.where(Issue.priority.in_(priorities))
 
     candidates = list(session.scalars(stmt))
+    if exclude_issue_ids:
+        candidates = [c for c in candidates if c.id not in exclude_issue_ids]
     if not candidates:
         return []
 

@@ -19,6 +19,7 @@ from .ai.embedder import get_embedder
 from .config import get_settings
 from .db import get_session
 from .models import Issue, LinkSuggestion, PullRequest, ScrapeState
+from .services.work_status import in_progress_map
 
 router = APIRouter()
 
@@ -123,12 +124,53 @@ def _scrape_rows(session: Session) -> str:
     return "\n".join(out)
 
 
+def _orphaned_rows(session: Session, evidence: dict) -> str:
+    """Rows for unassigned open issues that already have a PR in flight."""
+    items = []
+    for issue_id, ev in evidence.items():
+        issue = session.get(Issue, issue_id)
+        if issue is None or issue.assignee_login:
+            continue  # only the unassigned ones
+        items.append((issue, ev))
+    # Referenced (definite) first, then strongest matches.
+    items.sort(key=lambda t: (t[1].kind != "referenced", -(t[1].similarity or 1.0)))
+
+    if not items:
+        return (
+            '<tr><td colspan="3" class="empty">No unassigned issues appear to have '
+            "a PR in flight. </td></tr>"
+        )
+    out = []
+    for issue, ev in items[:50]:
+        if ev.kind == "referenced":
+            badge = '<span class="tag ref">referenced</span>'
+        else:
+            badge = f'<span class="tag mat">match {ev.similarity:.2f}</span>'
+        out.append(
+            f"""<tr>
+  <td><a href="{html.escape(issue.url or '#')}" target="_blank">#{issue.id}</a>
+    <div class="title">{html.escape(issue.subject)}</div></td>
+  <td>{badge}</td>
+  <td><a href="{html.escape(ev.pr.url or '#')}" target="_blank">#{ev.pr.number}</a>
+    <span class="repo">{html.escape(ev.pr.repo_full_name)}</span>
+    <div class="title">{html.escape(ev.pr.title)}</div></td>
+</tr>"""
+        )
+    return "\n".join(out)
+
+
 def render_dashboard(
     session: Session, *, min_similarity: float = 0.80, limit: int = 50
 ) -> str:
     """Build the full dashboard HTML for the current data (pure, testable)."""
     settings = get_settings()
     cov = _coverage(session)
+    evidence = in_progress_map(session)
+    orphaned = sum(
+        1
+        for iid in evidence
+        if (i := session.get(Issue, iid)) is not None and not i.assignee_login
+    )
     embedder_id = get_embedder().model_id
     total_pending = (
         session.scalar(
@@ -152,6 +194,11 @@ def render_dashboard(
                 "Flagged: missing link",
                 str(cov["flagged"]),
                 f"{total_pending} suggestions",
+            ),
+            _stat_tile(
+                "Unassigned, work in flight",
+                str(orphaned),
+                "started without assigning",
             ),
             _stat_tile("Accepted links", str(cov["accepted"])),
         ]
@@ -208,6 +255,10 @@ def render_dashboard(
   td.ok, .ok-text {{ color:#5fd18b; }}
   td.no {{ color:#f2889a; }}
   .empty {{ color:#6f7788; text-align:center; padding:22px; }}
+  .note {{ color:#8b93a3; font-size:13px; margin:-4px 0 10px; }}
+  .tag {{ font-size:11px; border-radius:12px; padding:2px 9px; white-space:nowrap; }}
+  .tag.ref {{ color:#e8c07a; background:#2a2413; border:1px solid #5a4a24; }}
+  .tag.mat {{ color:#8fb7ff; background:#182338; border:1px solid #2f4a7a; }}
   .scrape td {{ font-size:13px; }}
   tr.done {{ opacity:.35; transition:opacity .4s; }}
 </style>
@@ -236,6 +287,15 @@ def render_dashboard(
     <thead><tr><th>Similarity</th><th>Pull request</th><th>Tracker issue</th>
       <th>Decision</th></tr></thead>
     <tbody>{_suggestion_rows(session, min_similarity, limit)}</tbody>
+  </table>
+
+  <h2>Unassigned — but already being worked on</h2>
+  <p class="note">Open issues with no assignee that a PR is already tackling —
+    someone started without claiming the tracker. Referenced = the PR links the
+    issue; match = strong Granite similarity.</p>
+  <table>
+    <thead><tr><th>Tracker issue</th><th>Signal</th><th>Pull request</th></tr></thead>
+    <tbody>{_orphaned_rows(session, evidence)}</tbody>
   </table>
 
   <h2>Scrape health</h2>

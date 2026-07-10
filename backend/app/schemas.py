@@ -107,6 +107,8 @@ class RecommendIn(BaseModel):
     trackers: list[str] | None = None
     priorities: list[str] | None = None
     limit: int = 15
+    # Recommend work already being handled by a PR? Off by default.
+    include_in_progress: bool = False
 
 
 class RecommendationOut(BaseModel):
@@ -120,6 +122,22 @@ class RecommendationOut(BaseModel):
     priority: str | None = None
     project_name: str | None = None
     url: str | None = None
+
+
+class InProgressOut(BaseModel):
+    """An open issue that already has a PR working on it."""
+
+    issue_id: int
+    subject: str | None = None
+    issue_url: str | None = None
+    assignee_login: str | None = None
+    is_unassigned: bool
+    evidence: str  # "referenced" | "match"
+    similarity: float | None = None
+    pr_number: int | None = None
+    pr_repo: str | None = None
+    pr_title: str | None = None
+    pr_url: str | None = None
 
 
 class JobInfo(BaseModel):

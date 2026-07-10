@@ -46,6 +46,8 @@ class Settings(BaseSettings):
 
     # --- Matching / scheduling ---
     link_min_similarity: float = 0.72
+    # Higher bar for declaring an issue "already being worked on" by a PR.
+    in_progress_min_similarity: float = 0.82
     sync_open_minutes: int = 15
     sync_closed_hours: int = 6
     max_issues: int = 2000
