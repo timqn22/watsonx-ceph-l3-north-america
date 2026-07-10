@@ -1,0 +1,105 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+env/
+ENV/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ruby (legacy, not used in browser extension)
+*.gem
+*.rbc
+/.config
+/coverage/
+/InstalledFiles
+/pkg/
+/spec/reports/
+/spec/examples.txt
+/test/tmp/
+/test/version_tmp/
+/tmp/
+.bundle/
+vendor/bundle/
+Gemfile.lock
+
+# Environment variables
+.env
+.env.local
+*.env
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+*.bak
+
+# Logs
+*.log
+logs/
+
+# Database
+*.sqlite3
+*.db
+
+# Node modules (if any)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Browser extension (development artifacts)
+browser_extension/*.crx
+browser_extension/*.pem
+browser_extension/*.zip
+
+# API keys and secrets (never commit these!)
+config/secrets.yml
+config/watsonx_config.yml
+*_secrets.yml
+*.key
+*.pem
+
+# Model cache (Sentence Transformers downloads models here)
+python_service/.cache/
+.cache/
+models/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+test-results/
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store

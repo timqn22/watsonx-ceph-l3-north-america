@@ -1,0 +1,324 @@
+/* Sidebar panel styles for Ceph Tracker Linker extension */
+
+#ceph-linker-sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 400px;
+    height: 100vh;
+    background: #ffffff;
+    border-left: 2px solid #e1e4e8;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+    z-index: 999999;
+    overflow-y: auto;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    transition: transform 0.3s ease;
+}
+
+#ceph-linker-sidebar.collapsed {
+    transform: translateX(100%);
+}
+
+.ceph-linker-header {
+    position: sticky;
+    top: 0;
+    background: #24292e;
+    color: #ffffff;
+    padding: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
+}
+
+.ceph-linker-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.ceph-linker-toggle {
+    background: none;
+    border: none;
+    color: #ffffff;
+    cursor: pointer;
+    font-size: 20px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.ceph-linker-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.ceph-linker-content {
+    padding: 16px;
+}
+
+.ceph-linker-status {
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.ceph-linker-status.loading {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #856404;
+}
+
+.ceph-linker-status.error {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+}
+
+.ceph-linker-status.success {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+
+.ceph-linker-status.info {
+    background: #d1ecf1;
+    border: 1px solid #bee5eb;
+    color: #0c5460;
+}
+
+.ceph-linker-current-item {
+    background: #f6f8fa;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 16px;
+}
+
+.ceph-linker-current-item h3 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #24292e;
+}
+
+.ceph-linker-current-item p {
+    margin: 4px 0;
+    font-size: 13px;
+    color: #586069;
+}
+
+.ceph-linker-recommendations {
+    margin-top: 16px;
+}
+
+.ceph-linker-recommendations h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    color: #24292e;
+}
+
+.ceph-linker-recommendation {
+    background: #ffffff;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 12px;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.ceph-linker-recommendation:hover {
+    border-color: #0366d6;
+    box-shadow: 0 2px 4px rgba(3, 102, 214, 0.1);
+}
+
+.ceph-linker-recommendation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+}
+
+.ceph-linker-recommendation-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #0366d6;
+    margin: 0;
+    flex: 1;
+    text-decoration: none;
+}
+
+.ceph-linker-recommendation-title:hover {
+    text-decoration: underline;
+}
+
+.ceph-linker-similarity-badge {
+    background: #28a745;
+    color: #ffffff;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.ceph-linker-similarity-badge.high {
+    background: #28a745;
+}
+
+.ceph-linker-similarity-badge.medium {
+    background: #ffc107;
+    color: #000000;
+}
+
+.ceph-linker-similarity-badge.low {
+    background: #6c757d;
+}
+
+.ceph-linker-recommendation-meta {
+    font-size: 12px;
+    color: #586069;
+    margin: 4px 0;
+}
+
+.ceph-linker-recommendation-description {
+    font-size: 13px;
+    color: #24292e;
+    margin: 8px 0;
+    line-height: 1.5;
+}
+
+.ceph-linker-recommendation-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.ceph-linker-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid #e1e4e8;
+    background: #ffffff;
+    color: #24292e;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.ceph-linker-btn:hover {
+    background: #f6f8fa;
+    border-color: #d1d5da;
+}
+
+.ceph-linker-btn-primary {
+    background: #0366d6;
+    color: #ffffff;
+    border-color: #0366d6;
+}
+
+.ceph-linker-btn-primary:hover {
+    background: #0256c7;
+    border-color: #0256c7;
+}
+
+.ceph-linker-empty {
+    text-align: center;
+    padding: 32px 16px;
+    color: #586069;
+}
+
+.ceph-linker-empty-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.ceph-linker-empty-text {
+    font-size: 14px;
+    margin: 0;
+}
+
+.ceph-linker-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #0366d6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    #ceph-linker-sidebar {
+        width: 350px;
+    }
+}
+
+@media (max-width: 768px) {
+    #ceph-linker-sidebar {
+        width: 100%;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    #ceph-linker-sidebar {
+        background: #1e1e1e;
+        border-left-color: #333333;
+    }
+
+    .ceph-linker-current-item {
+        background: #2d2d2d;
+        border-color: #444444;
+    }
+
+    .ceph-linker-current-item h3,
+    .ceph-linker-recommendations h3,
+    .ceph-linker-recommendation-description {
+        color: #e1e4e8;
+    }
+
+    .ceph-linker-current-item p,
+    .ceph-linker-recommendation-meta {
+        color: #8b949e;
+    }
+
+    .ceph-linker-recommendation {
+        background: #2d2d2d;
+        border-color: #444444;
+    }
+
+    .ceph-linker-recommendation:hover {
+        border-color: #58a6ff;
+    }
+
+    .ceph-linker-btn {
+        background: #2d2d2d;
+        border-color: #444444;
+        color: #e1e4e8;
+    }
+
+    .ceph-linker-btn:hover {
+        background: #3d3d3d;
+    }
+}
+
+/* Made with Bob */
