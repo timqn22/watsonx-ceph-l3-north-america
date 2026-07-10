@@ -62,6 +62,21 @@ def test_closed_issues_excluded(session):
     assert all(r.issue_id != 2 for r in recs)
 
 
+def test_assigned_issues_are_not_recommended(session):
+    _issue(session, 1, "rbd mirror snapshot", "rbd mirror work")  # unassigned
+    session.add(
+        Issue(id=2, subject="rbd mirror snapshot other", description="rbd mirror",
+              is_open=True, assignee_login="someone", content_hash=content_hash("2"),
+              url="https://tracker.ceph.com/issues/2")
+    )
+    session.commit()
+    refresh_embeddings(session)
+
+    recs = recommend_issues(session, skill_prompt="rbd mirror snapshot", stretch=0)
+    ids = {r.issue_id for r in recs}
+    assert 1 in ids and 2 not in ids  # assigned issue #2 is excluded
+
+
 def test_profile_roundtrip_and_empty_prompt(session):
     profile = get_or_create_profile(session)
     assert profile.external_id == "me"

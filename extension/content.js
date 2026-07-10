@@ -87,13 +87,14 @@
     body.replaceChildren();
     for (const s of items) {
       const linked = s.relationship === "linked";
+      const conf = pct(s.confidence != null ? s.confidence : s.similarity);
       const left = linked
         ? el("div", { class: "ta-relbadge ta-linked" }, "Linked")
         : el(
             "div",
             { class: "ta-sim" },
-            el("div", { class: "ta-bar" }, el("span", { style: `width:${pct(s.similarity)}%` })),
-            el("div", { class: "ta-simn" }, `${pct(s.similarity)}% match`)
+            el("div", { class: "ta-bar" }, el("span", { style: `width:${conf}%` })),
+            el("div", { class: "ta-simn" }, `${conf}% confidence`)
           );
       const tags = el(
         "div",

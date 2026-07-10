@@ -132,6 +132,7 @@ class RelatedPrOut(BaseModel):
 
     relationship: str  # "linked" | "suggested"
     similarity: float | None = None
+    confidence: float | None = None  # calibrated 0..1 for display
     pr_number: int
     pr_repo: str
     pr_title: str | None = None

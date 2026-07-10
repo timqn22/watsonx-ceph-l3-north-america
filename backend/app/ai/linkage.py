@@ -18,6 +18,7 @@ import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..config import get_settings
 from ..models import Issue, LinkSuggestion, PullRequest
 
 logger = logging.getLogger(__name__)
@@ -101,53 +102,75 @@ class RelatedPR:
     pr: PullRequest
     relationship: str  # "linked" | "suggested"
     similarity: float | None
+    confidence: float | None  # calibrated 0..1 for display
+
+
+def calibrate(cosine: float, floor: float) -> float:
+    """Rescale raw cosine to a 0..1 confidence, subtracting the domain baseline.
+
+    Granite similarities among Ceph items sit well above zero even when
+    unrelated, so a raw 0.77 is not "77% related". Mapping [floor..1] -> [0..1]
+    makes the number honest: at or below the floor reads as ~0%.
+    """
+    if cosine <= floor:
+        return 0.0
+    return (cosine - floor) / (1.0 - floor)
 
 
 def related_prs_for_issue(
     session: Session,
     issue: Issue,
     *,
-    limit: int = 6,
-    min_similarity: float = 0.5,
+    limit: int | None = None,
+    min_similarity: float | None = None,
+    floor: float | None = None,
 ) -> list[RelatedPR]:
-    """All PRs related to an issue, for the issue-page panel.
+    """PRs related to an issue, for the issue-page panel.
 
-    Unlike the missing-link suggestion cache, this includes PRs that already
-    reference the issue (labeled "linked") and PRs in any state (open/merged/
-    closed), so a user viewing a tracker sees the real associated PR even when
-    it's already linked or has merged. Referenced PRs come first, then the
-    strongest embedding matches.
+    Rules (tuned to avoid overwhelming/misleading the user):
+      * If any PR already references the issue, show ONLY those linked PRs --
+        no speculative matches alongside a real link.
+      * Otherwise show at most ``limit`` "possible match" PRs, and only those
+        above ``min_similarity`` (raw cosine), with a calibrated confidence.
+    Includes PRs in any state (open/merged/closed).
     """
-    results: list[RelatedPR] = []
-    seen: set[str] = set()
+    settings = get_settings()
+    limit = settings.related_pr_limit if limit is None else limit
+    if min_similarity is None:
+        min_similarity = settings.related_pr_min_similarity
+    if floor is None:
+        floor = settings.similarity_floor
 
-    # 1) Definite: any PR (any state) that references this issue.
-    for pr in session.scalars(select(PullRequest)):
-        if pr.referenced_issue_ids and issue.id in pr.referenced_issue_ids:
-            results.append(RelatedPR(pr, "linked", None))
-            seen.add(pr.id)
+    # 1) Definite links win outright.
+    linked = [
+        RelatedPR(pr, "linked", None, None)
+        for pr in session.scalars(select(PullRequest))
+        if pr.referenced_issue_ids and issue.id in pr.referenced_issue_ids
+    ]
+    if linked:
+        return linked[:limit]
 
-    # 2) Likely: strongest embedding matches among the rest.
-    if issue.embedding is not None:
-        prs = [
-            p
-            for p in session.scalars(
-                select(PullRequest).where(PullRequest.embedding.is_not(None))
-            )
-            if p.id not in seen
-        ]
-        if prs:
-            mat = np.asarray([p.embedding for p in prs], dtype=np.float32)
-            vec = np.asarray(issue.embedding, dtype=np.float32)
-            sims = mat @ vec
-            for idx in np.argsort(-sims):
-                if sims[idx] < min_similarity or len(
-                    [r for r in results if r.relationship == "suggested"]
-                ) >= limit:
-                    break
-                results.append(RelatedPR(prs[idx], "suggested", float(sims[idx])))
+    # 2) Otherwise, the strongest embedding matches above the bar.
+    if issue.embedding is None:
+        return []
+    prs = list(
+        session.scalars(select(PullRequest).where(PullRequest.embedding.is_not(None)))
+    )
+    if not prs:
+        return []
+    mat = np.asarray([p.embedding for p in prs], dtype=np.float32)
+    vec = np.asarray(issue.embedding, dtype=np.float32)
+    sims = mat @ vec
 
-    return results
+    suggested: list[RelatedPR] = []
+    for idx in np.argsort(-sims):
+        cos = float(sims[idx])
+        if cos < min_similarity or len(suggested) >= limit:
+            break
+        suggested.append(
+            RelatedPR(prs[idx], "suggested", cos, calibrate(cos, floor))
+        )
+    return suggested
 
 
 def rebuild_suggestions(

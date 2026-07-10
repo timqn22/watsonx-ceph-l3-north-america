@@ -305,6 +305,7 @@ def related_prs(
             RelatedPrOut(
                 relationship=r.relationship,
                 similarity=round(r.similarity, 4) if r.similarity is not None else None,
+                confidence=round(r.confidence, 4) if r.confidence is not None else None,
                 pr_number=r.pr.number,
                 pr_repo=r.pr.repo_full_name,
                 pr_title=r.pr.title,

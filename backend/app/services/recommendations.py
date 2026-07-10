@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass
 
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..ai.embedder import Embedder, get_embedder
@@ -78,14 +78,16 @@ def recommend_issues(
     limit: int = 15,
     stretch: int = 2,
     exclude_issue_ids: set[int] | None = None,
+    exclude_assigned: bool = True,
     embedder: Embedder | None = None,
 ) -> list[Recommendation]:
     """Rank open issues by fit to ``skill_prompt``, applying optional filters.
 
     Returns up to ``limit`` picks: the strongest matches, plus up to ``stretch``
     "growth" issues drawn from a mid fit band (marked ``is_stretch``).
-    ``exclude_issue_ids`` drops issues already being worked on so we never
-    recommend taken work.
+    ``exclude_issue_ids`` drops issues already being worked on, and
+    ``exclude_assigned`` drops issues that already have an assignee -- so we only
+    ever recommend genuinely available, unclaimed work.
     """
     embedder = embedder or get_embedder()
     if not skill_prompt.strip():
@@ -95,6 +97,10 @@ def recommend_issues(
     stmt = select(Issue).where(Issue.is_open.is_(True)).where(
         Issue.embedding.is_not(None)
     )
+    if exclude_assigned:
+        stmt = stmt.where(
+            or_(Issue.assignee_login.is_(None), Issue.assignee_login == "")
+        )
     if projects:
         stmt = stmt.where(Issue.project_name.in_(projects))
     if trackers:

@@ -48,6 +48,14 @@ class Settings(BaseSettings):
     link_min_similarity: float = 0.72
     # Higher bar for declaring an issue "already being worked on" by a PR.
     in_progress_min_similarity: float = 0.82
+    # Granite cosine has a high domain baseline (unrelated Ceph items still
+    # score ~0.7 because they share jargon). We subtract this floor and rescale
+    # so the *displayed* confidence is meaningful; cos<=floor -> 0% confidence.
+    similarity_floor: float = 0.70
+    # Only surface a "possible match" PR on an issue page above this raw cosine,
+    # and never show more than this many.
+    related_pr_min_similarity: float = 0.80
+    related_pr_limit: int = 3
     sync_open_minutes: int = 15
     sync_closed_hours: int = 6
     max_issues: int = 2000
