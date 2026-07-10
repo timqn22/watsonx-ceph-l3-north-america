@@ -121,21 +121,103 @@
     }
   }
 
+  // Identify the logged-in Redmine user from the page (for auto sign-in).
+  function currentRedmineUser() {
+    const a =
+      document.querySelector('#loggedas a[href*="/users/"]') ||
+      document.querySelector('a.user.active[href*="/users/"]');
+    if (a) {
+      const m = a.getAttribute("href").match(/\/users\/(\d+)/);
+      if (m) return { id: parseInt(m[1], 10), login: (a.textContent || "").trim() };
+    }
+    return null;
+  }
+
+  // Build a skill/background text from the user's own Redmine activity, so they
+  // never have to type it. Uses public issues.json filtered to them.
+  async function redmineActivity(origin, userId) {
+    const q = (field) =>
+      fetch(
+        `${origin}/issues.json?${field}=${userId}&status_id=*&sort=updated_on:desc&limit=50`,
+        { credentials: "include" }
+      )
+        .then((r) => (r.ok ? r.json() : { issues: [] }))
+        .catch(() => ({ issues: [] }));
+    const [assigned, authored] = await Promise.all([
+      q("assigned_to_id"),
+      q("author_id"),
+    ]);
+    const byId = {};
+    for (const i of [...(assigned.issues || []), ...(authored.issues || [])])
+      byId[i.id] = i;
+    const issues = Object.values(byId);
+    const subjects = issues.slice(0, 30).map((i) => i.subject).filter(Boolean);
+    const projects = [
+      ...new Set(issues.map((i) => i.project && i.project.name).filter(Boolean)),
+    ];
+    const trackers = [
+      ...new Set(issues.map((i) => i.tracker && i.tracker.name).filter(Boolean)),
+    ];
+    const text = subjects.length
+      ? `Based on my Ceph tracker history I have worked on: ${subjects.join("; ")}. ` +
+        `Main projects: ${projects.join(", ")}. Work types: ${trackers.join(", ")}.`
+      : "";
+    return { text, projects, trackers, count: issues.length };
+  }
+
   // ---- Listing / My page: recommendations ------------------------------
-  async function recommendPanel(base, user) {
+  async function recommendPanel(base, settingsUser) {
     const body = mountPanel(
       "Recommended for you",
       "Open issues ranked to your profile — already-in-progress work is hidden."
     );
 
+    const rUser = currentRedmineUser();
+    const user = settingsUser || (rUser && rUser.login) || "";
     if (!user) {
       return banner(
         body,
-        "Open the TrackerAssist popup, enter your ID, and save your profile to see recommendations."
+        "Couldn't detect your Redmine login. Open the TrackerAssist popup and set your ID."
       );
     }
 
-    // Filter row: priority dropdown + refresh.
+    // Ensure the user has a profile; if not, auto-build one from their Redmine
+    // activity and save it so it persists (and powers the dashboard too).
+    async function ensureProfile(force) {
+      let profile = null;
+      try {
+        profile = await api(base, `/profiles/${encodeURIComponent(user)}`);
+      } catch (e) {
+        return { mode: "offline" };
+      }
+      const hasContent =
+        profile &&
+        ((profile.skill_prompt || "").trim() || (profile.background || "").trim());
+      if (hasContent && !force) return { mode: "profile" };
+      if (!rUser) return { mode: hasContent ? "profile" : "none" };
+      const act = await redmineActivity(location.origin, rUser.id);
+      if (!act.text) return { mode: hasContent ? "profile" : "none" };
+      try {
+        await api(base, `/profiles/${encodeURIComponent(user)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            skill_prompt: force ? "" : profile.skill_prompt || "",
+            background: act.text,
+            display_name: rUser.login,
+            preferred_projects: act.projects,
+            preferred_trackers: act.trackers,
+            preferred_priorities: null,
+          }),
+        });
+      } catch (e) {
+        /* still recommend below using the derived text if save failed */
+      }
+      return { mode: "auto", count: act.count };
+    }
+
+    // Source note (how the profile was built) + filter row.
+    const note = el("div", { class: "ta-source" }, `Signed in as ${user}.`);
     const prioritySel = el(
       "select",
       { class: "ta-select" },
@@ -143,17 +225,33 @@
       ...PRIORITIES.map((p) => el("option", { value: p }, p))
     );
     const refresh = el("button", { class: "ta-refresh" }, "Refresh");
+    const rederive = el("a", { class: "ta-relink", href: "#" }, "Rebuild from my activity");
     const controls = el(
       "div",
       { class: "ta-controls" },
       el("label", {}, "Priority"),
       prioritySel,
-      refresh
+      refresh,
+      rederive
     );
     const results = el("div", { class: "ta-results" });
-    body.append(controls, results);
+    body.append(note, controls, results);
 
-    const load = async () => {
+    function describeMode(m) {
+      if (m.mode === "auto")
+        note.textContent = `Signed in as ${user} · personalized from your ${m.count} recent Ceph trackers (refine in the popup).`;
+      else if (m.mode === "profile")
+        note.textContent = `Signed in as ${user} · using your saved profile.`;
+      else if (m.mode === "none")
+        note.textContent = `Signed in as ${user} · no skills yet — add them in the popup, or nothing was found in your Redmine activity.`;
+      else note.textContent = `Signed in as ${user}.`;
+    }
+
+    const load = async (force) => {
+      banner(results, force ? "Rebuilding from your activity…" : "Ranking issues…");
+      const mode = await ensureProfile(force);
+      describeMode(mode);
+      if (mode.mode === "none") return banner(results, "");
       banner(results, "Ranking issues…");
       const priorities = prioritySel.value ? [prioritySel.value] : null;
       let recs;
@@ -207,9 +305,13 @@
       }
     };
 
-    prioritySel.addEventListener("change", load);
-    refresh.addEventListener("click", load);
-    load();
+    prioritySel.addEventListener("change", () => load(false));
+    refresh.addEventListener("click", () => load(false));
+    rederive.addEventListener("click", (e) => {
+      e.preventDefault();
+      load(true);
+    });
+    load(false);
   }
 
   // ---- Route ----------------------------------------------------------

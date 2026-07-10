@@ -10,9 +10,12 @@ you just load the folder.
   panel — PRs that likely belong to this tracker, each with a similarity bar and
   **Accept / Ignore** buttons.
 - **On issue listings / My page**: injects a **Recommended for you** panel —
-  open issues ranked to *your* saved profile (skills + previous projects), with
-  a **priority dropdown** (Low / Normal / High / Urgent / Immediate). Work that's
-  already in progress is hidden automatically.
+  open issues ranked to *your* profile, with a **priority dropdown** (Low /
+  Normal / High / Urgent / Immediate). Work already in progress is hidden.
+  **You don't have to fill anything in**: it auto-signs-in with your Redmine
+  login and builds your profile from the trackers you've been assigned/authored.
+  Use the popup only to refine skills, or click "Rebuild from my activity" to
+  refresh it.
 
 Everything talks to your TrackerAssist backend; the extension itself holds no
 credentials — just the backend URL and your user id.
