@@ -18,6 +18,7 @@ from . import __version__
 from .api import router
 from .dashboard import router as dashboard_router
 from .db import init_db
+from .recommend_page import router as recommend_router
 from .scheduler import shutdown_scheduler, start_scheduler
 
 logging.basicConfig(
@@ -50,6 +51,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(router)
     app.include_router(dashboard_router)
+    app.include_router(recommend_router)
     return app
 
 

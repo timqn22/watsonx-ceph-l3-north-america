@@ -42,10 +42,15 @@ real keys:
 See [`backend/DECISIONS.md`](./backend/DECISIONS.md) for the reasoning behind
 the stack choices.
 
+## Features
+
+- **PR ↔ tracker linkage** (`/dashboard`): scrape → Granite embeddings → ranked
+  missing-link suggestions with an Accept/Ignore review queue.
+- **Personalized task recommendations** (`/recommend`): describe your skills,
+  get open issues ranked by fit — same Granite embedder, no extra model.
+
 ## Roadmap
 
-- **Now:** PR ↔ tracker linkage suggestions (scrape → Granite embeddings → match).
-- **Next:** personalized task recommendations (skill profiles + Granite instruct
-  model) reusing the same issue substrate.
-- **Then:** a Manifest V3 browser extension that overlays these panels directly
-  on Redmine pages, plus a manager review dashboard.
+- A Manifest V3 browser extension that overlays these panels directly on Redmine
+  pages.
+- A natural-language "why" for recommendations via a Granite *instruct* model.

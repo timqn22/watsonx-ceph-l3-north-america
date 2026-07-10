@@ -74,6 +74,54 @@ class RescrapeIn(BaseModel):
     source: str  # redmine_open | redmine_closed | github_open | github_closed
 
 
+class ProfileIn(BaseModel):
+    """Create/update a skill profile."""
+
+    skill_prompt: str = ""
+    display_name: str | None = None
+    preferred_projects: list[str] | None = None
+    preferred_trackers: list[str] | None = None
+    preferred_priorities: list[str] | None = None
+
+
+class ProfileOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    external_id: str
+    display_name: str | None = None
+    skill_prompt: str
+    preferred_projects: list[str] | None = None
+    preferred_trackers: list[str] | None = None
+    preferred_priorities: list[str] | None = None
+
+
+class RecommendIn(BaseModel):
+    """Request personalized issue recommendations.
+
+    If ``skill_prompt`` is omitted, the stored profile's prompt is used.
+    Filters override the profile's preferences when provided.
+    """
+
+    skill_prompt: str | None = None
+    projects: list[str] | None = None
+    trackers: list[str] | None = None
+    priorities: list[str] | None = None
+    limit: int = 15
+
+
+class RecommendationOut(BaseModel):
+    issue_id: int
+    fit_score: int
+    similarity: float
+    reason: str
+    is_stretch: bool
+    subject: str | None = None
+    tracker_name: str | None = None
+    priority: str | None = None
+    project_name: str | None = None
+    url: str | None = None
+
+
 class JobInfo(BaseModel):
     name: str
     next_run_time: str | None = None

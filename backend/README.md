@@ -73,6 +73,9 @@ network, no credentials, no model downloads.
 | POST | `/suggestions/links/{id}/decision` | `{status: accepted\|rejected\|ignored}` |
 | POST | `/admin/rescrape` | `{source: redmine_open\|...}` force one cycle (demos) |
 | GET  | `/dashboard` | manager review queue as a web page (Accept/Ignore, coverage stats) |
+| GET/PUT | `/profiles/me` | read/update the skill profile (Feature B) |
+| POST | `/recommendations/issues` | rank open issues by fit to a skill description |
+| GET  | `/recommend` | skill-based task recommendation page |
 
 ### Manager dashboard
 
@@ -80,6 +83,16 @@ Open **http://localhost:8000/dashboard** in a browser: coverage tiles, the
 ranked missing-link queue with Accept/Ignore buttons, a similarity filter, and
 scrape health. Set `DASHBOARD_TOKEN` in `.env` to require `?token=<value>`;
 leave it blank for an open page on localhost.
+
+### Task recommendations (Feature B)
+
+Open **http://localhost:8000/recommend**: describe your skills in free text
+(plus optional project/tracker/priority filters) and get open issues ranked by
+fit. It reuses the **same Granite embedder** as the linkage feature — the skill
+description and the issues are embedded and compared by cosine similarity — so
+it needs no extra model and no watsonx quota. A natural-language rationale via a
+Granite *instruct* model is a future upgrade; today each pick shows an honest
+keyword-overlap "why".
 
 ## Layout
 

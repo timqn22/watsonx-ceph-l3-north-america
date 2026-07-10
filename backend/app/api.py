@@ -23,11 +23,16 @@ from .schemas import (
     IssueOut,
     JobInfo,
     LinkSuggestionOut,
+    ProfileIn,
+    ProfileOut,
     PullRequestOut,
+    RecommendationOut,
+    RecommendIn,
     RescrapeIn,
 )
 from .scheduler import get_scheduler
 from .services.pipeline import run_source
+from .services.recommendations import get_or_create_profile, recommend_issues
 
 router = APIRouter()
 
@@ -187,6 +192,66 @@ def decide(
     s.decided_by = body.decided_by
     session.commit()
     return _enrich(session, s)
+
+
+@router.get("/profiles/me", response_model=ProfileOut)
+def get_profile(session: Session = Depends(get_session)) -> ProfileOut:
+    return ProfileOut.model_validate(get_or_create_profile(session))
+
+
+@router.put("/profiles/me", response_model=ProfileOut)
+def put_profile(
+    body: ProfileIn, session: Session = Depends(get_session)
+) -> ProfileOut:
+    profile = get_or_create_profile(session)
+    profile.skill_prompt = body.skill_prompt
+    profile.display_name = body.display_name
+    profile.preferred_projects = body.preferred_projects
+    profile.preferred_trackers = body.preferred_trackers
+    profile.preferred_priorities = body.preferred_priorities
+    # Invalidate the cached embedding; recomputed on next recommendation.
+    profile.skill_embedding = None
+    profile.skill_embedded_hash = None
+    session.commit()
+    return ProfileOut.model_validate(profile)
+
+
+@router.post("/recommendations/issues", response_model=list[RecommendationOut])
+def recommend(
+    body: RecommendIn, session: Session = Depends(get_session)
+) -> list[RecommendationOut]:
+    profile = get_or_create_profile(session)
+    skill_prompt = body.skill_prompt if body.skill_prompt is not None else profile.skill_prompt
+    if not skill_prompt.strip():
+        raise HTTPException(422, "No skill_prompt provided and no profile saved yet")
+
+    recs = recommend_issues(
+        session,
+        skill_prompt=skill_prompt,
+        projects=body.projects or profile.preferred_projects,
+        trackers=body.trackers or profile.preferred_trackers,
+        priorities=body.priorities or profile.preferred_priorities,
+        limit=body.limit,
+    )
+
+    out: list[RecommendationOut] = []
+    for r in recs:
+        issue = session.get(Issue, r.issue_id)
+        out.append(
+            RecommendationOut(
+                issue_id=r.issue_id,
+                fit_score=r.fit_score,
+                similarity=round(r.similarity, 4),
+                reason=r.reason,
+                is_stretch=r.is_stretch,
+                subject=issue.subject if issue else None,
+                tracker_name=issue.tracker_name if issue else None,
+                priority=issue.priority if issue else None,
+                project_name=issue.project_name if issue else None,
+                url=issue.url if issue else None,
+            )
+        )
+    return out
 
 
 @router.post("/admin/rescrape")

@@ -105,6 +105,30 @@ class ScrapeState(Base):
     last_error: Mapped[str | None] = mapped_column(Text)
 
 
+class UserProfile(Base):
+    """A person's skill profile, used to personalize task recommendations.
+
+    Single-user demos use ``external_id="me"``. The skill_prompt is free text;
+    its embedding is cached so recommendations don't re-embed it every request.
+    """
+
+    __tablename__ = "user_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    external_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    display_name: Mapped[str | None] = mapped_column(String(255))
+    skill_prompt: Mapped[str] = mapped_column(Text, default="")
+
+    preferred_projects: Mapped[list[str] | None] = mapped_column(JSON)
+    preferred_trackers: Mapped[list[str] | None] = mapped_column(JSON)
+    preferred_priorities: Mapped[list[str] | None] = mapped_column(JSON)
+
+    skill_embedding: Mapped[list[float] | None] = mapped_column(JSON)
+    skill_embedded_hash: Mapped[str | None] = mapped_column(String(64))
+
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
 class LinkSuggestion(Base):
     """A cached suggestion that a PR and an issue should be linked."""
 
