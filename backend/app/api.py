@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .ai.embedder import get_embedder
+from .ai.linkage import related_prs_for_issue
 from .config import get_settings
 from .db import get_session
 from .models import Issue, LinkSuggestion, PullRequest
@@ -29,6 +30,7 @@ from .schemas import (
     PullRequestOut,
     RecommendationOut,
     RecommendIn,
+    RelatedPrOut,
     RescrapeIn,
 )
 from .scheduler import get_scheduler
@@ -283,6 +285,31 @@ def recommend(
                 priority=issue.priority if issue else None,
                 project_name=issue.project_name if issue else None,
                 url=issue.url if issue else None,
+            )
+        )
+    return out
+
+
+@router.get("/issues/{issue_id}/related-prs", response_model=list[RelatedPrOut])
+def related_prs(
+    issue_id: int, session: Session = Depends(get_session)
+) -> list[RelatedPrOut]:
+    """All PRs related to an issue: already-linked ones plus likely matches,
+    across open/merged/closed — for the extension's issue-page panel."""
+    issue = session.get(Issue, issue_id)
+    if issue is None:
+        raise HTTPException(404, "issue not found")
+    out: list[RelatedPrOut] = []
+    for r in related_prs_for_issue(session, issue):
+        out.append(
+            RelatedPrOut(
+                relationship=r.relationship,
+                similarity=round(r.similarity, 4) if r.similarity is not None else None,
+                pr_number=r.pr.number,
+                pr_repo=r.pr.repo_full_name,
+                pr_title=r.pr.title,
+                pr_url=r.pr.url,
+                state=r.pr.state,
             )
         )
     return out

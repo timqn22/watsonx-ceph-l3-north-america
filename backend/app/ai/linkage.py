@@ -96,6 +96,60 @@ def suggest_links_for_pr(
     )
 
 
+@dataclass
+class RelatedPR:
+    pr: PullRequest
+    relationship: str  # "linked" | "suggested"
+    similarity: float | None
+
+
+def related_prs_for_issue(
+    session: Session,
+    issue: Issue,
+    *,
+    limit: int = 6,
+    min_similarity: float = 0.5,
+) -> list[RelatedPR]:
+    """All PRs related to an issue, for the issue-page panel.
+
+    Unlike the missing-link suggestion cache, this includes PRs that already
+    reference the issue (labeled "linked") and PRs in any state (open/merged/
+    closed), so a user viewing a tracker sees the real associated PR even when
+    it's already linked or has merged. Referenced PRs come first, then the
+    strongest embedding matches.
+    """
+    results: list[RelatedPR] = []
+    seen: set[str] = set()
+
+    # 1) Definite: any PR (any state) that references this issue.
+    for pr in session.scalars(select(PullRequest)):
+        if pr.referenced_issue_ids and issue.id in pr.referenced_issue_ids:
+            results.append(RelatedPR(pr, "linked", None))
+            seen.add(pr.id)
+
+    # 2) Likely: strongest embedding matches among the rest.
+    if issue.embedding is not None:
+        prs = [
+            p
+            for p in session.scalars(
+                select(PullRequest).where(PullRequest.embedding.is_not(None))
+            )
+            if p.id not in seen
+        ]
+        if prs:
+            mat = np.asarray([p.embedding for p in prs], dtype=np.float32)
+            vec = np.asarray(issue.embedding, dtype=np.float32)
+            sims = mat @ vec
+            for idx in np.argsort(-sims):
+                if sims[idx] < min_similarity or len(
+                    [r for r in results if r.relationship == "suggested"]
+                ) >= limit:
+                    break
+                results.append(RelatedPR(prs[idx], "suggested", float(sims[idx])))
+
+    return results
+
+
 def rebuild_suggestions(
     session: Session,
     *,

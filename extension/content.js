@@ -68,62 +68,56 @@
   async function issuePanel(base, issueId) {
     const body = mountPanel(
       "Related pull requests",
-      "PRs that look like they belong to this tracker."
+      "PRs already linked to this tracker, plus likely matches."
     );
     banner(body, "Loading…");
     let items;
     try {
-      items = await api(base, `/suggestions/links/for-issue/${issueId}`);
+      items = await api(base, `/issues/${issueId}/related-prs`);
     } catch (e) {
       return banner(body, "Backend offline — check the TrackerAssist popup.");
     }
     if (!items.length) {
-      return banner(body, "No likely pull requests found for this issue.");
+      return banner(
+        body,
+        "No related pull requests in the scraped data. If the PR is merged, " +
+          "it may not be synced yet (closed PRs sync every 6h)."
+      );
     }
     body.replaceChildren();
     for (const s of items) {
-      const card = el(
+      const linked = s.relationship === "linked";
+      const left = linked
+        ? el("div", { class: "ta-relbadge ta-linked" }, "Linked")
+        : el(
+            "div",
+            { class: "ta-sim" },
+            el("div", { class: "ta-bar" }, el("span", { style: `width:${pct(s.similarity)}%` })),
+            el("div", { class: "ta-simn" }, `${pct(s.similarity)}% match`)
+          );
+      const tags = el(
         "div",
-        { class: "ta-card" },
+        { class: "ta-tags" },
+        el("span", { class: "ta-tag" }, s.state)
+      );
+      body.append(
         el(
           "div",
-          { class: "ta-sim" },
-          el("div", { class: "ta-bar" }, el("span", { style: `width:${pct(s.similarity)}%` })),
-          el("div", { class: "ta-simn" }, `${pct(s.similarity)}%`)
-        ),
-        el(
-          "div",
-          { class: "ta-info" },
+          { class: "ta-card" },
+          left,
           el(
-            "a",
-            { href: s.pr_url || "#", target: "_blank", class: "ta-link" },
-            `${s.pr_repo} #${s.pr_number}`
-          ),
-          el("div", { class: "ta-desc" }, s.pr_title || "")
+            "div",
+            { class: "ta-info" },
+            el(
+              "a",
+              { href: s.pr_url || "#", target: "_blank", class: "ta-link" },
+              `${s.pr_repo} #${s.pr_number}`
+            ),
+            el("div", { class: "ta-desc" }, s.pr_title || ""),
+            tags
+          )
         )
       );
-      const actions = el("div", { class: "ta-actions" });
-      const decide = async (status, btn) => {
-        btn.disabled = true;
-        try {
-          await api(base, `/suggestions/links/${s.id}/decision`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status, decided_by: "extension" }),
-          });
-          card.classList.add("ta-done");
-          setTimeout(() => card.remove(), 350);
-        } catch (e) {
-          btn.disabled = false;
-        }
-      };
-      const ok = el("button", { class: "ta-ok" }, "Accept");
-      const no = el("button", { class: "ta-no" }, "Ignore");
-      ok.addEventListener("click", () => decide("accepted", ok));
-      no.addEventListener("click", () => decide("ignored", no));
-      actions.append(ok, no);
-      card.append(actions);
-      body.append(card);
     }
   }
 

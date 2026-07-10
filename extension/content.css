@@ -63,6 +63,12 @@
 }
 .ta-stretch { color: #9a6b12; background: #fdf3df; border-color: #efd9a8; }
 .ta-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.ta-relbadge { flex: 0 0 60px; font-size: 11px; font-weight: 600; text-align: center;
+  border-radius: 6px; padding: 4px 2px; }
+.ta-linked { color: #1a7f37; background: #dafbe1; border: 1px solid #aadfba; }
+@media (prefers-color-scheme: dark) {
+  .ta-linked { color: #5fd18b; background: #14261a; border-color: #2f6f47; }
+}
 
 @media (prefers-color-scheme: dark) {
   .ta-panel { background: #171a22; border-color: #2a2f3a; color: #e7e9ee; }

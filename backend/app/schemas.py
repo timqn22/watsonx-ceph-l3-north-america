@@ -127,6 +127,18 @@ class RecommendationOut(BaseModel):
     url: str | None = None
 
 
+class RelatedPrOut(BaseModel):
+    """A PR related to an issue, for the issue-page panel."""
+
+    relationship: str  # "linked" | "suggested"
+    similarity: float | None = None
+    pr_number: int
+    pr_repo: str
+    pr_title: str | None = None
+    pr_url: str | None = None
+    state: str
+
+
 class InProgressOut(BaseModel):
     """An open issue that already has a PR working on it."""
 
