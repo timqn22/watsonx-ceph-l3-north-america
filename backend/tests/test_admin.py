@@ -39,3 +39,30 @@ def test_rescrape_defaults_full_false(monkeypatch):
 def test_rescrape_rejects_bad_source(monkeypatch):
     r = _client(monkeypatch).post("/admin/rescrape", json={"source": "nope"})
     assert r.status_code == 422
+
+
+def test_rescrape_requires_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "s3cret")
+    from app.config import get_settings
+
+    get_settings.cache_clear()  # pick up the env override
+    client = _client(monkeypatch)
+    try:
+        # No token -> rejected.
+        assert client.post("/admin/rescrape", json={"source": "github_open"}).status_code == 401
+        # Wrong token -> rejected.
+        assert client.post(
+            "/admin/rescrape?token=nope", json={"source": "github_open"}
+        ).status_code == 401
+        # Correct token (query) -> ok.
+        assert client.post(
+            "/admin/rescrape?token=s3cret", json={"source": "github_open"}
+        ).status_code == 200
+        # Correct token (header) -> ok.
+        assert client.post(
+            "/admin/rescrape",
+            json={"source": "github_open"},
+            headers={"X-Admin-Token": "s3cret"},
+        ).status_code == 200
+    finally:
+        get_settings.cache_clear()

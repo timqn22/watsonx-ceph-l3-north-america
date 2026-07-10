@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -364,7 +364,15 @@ def issues_in_progress(
 
 
 @router.post("/admin/rescrape")
-def rescrape(body: RescrapeIn, background: BackgroundTasks) -> dict[str, str | bool]:
+def rescrape(
+    body: RescrapeIn,
+    background: BackgroundTasks,
+    token: str | None = Query(None),
+    x_admin_token: str | None = Header(None),
+) -> dict[str, str | bool]:
+    configured = get_settings().admin_token
+    if configured and configured not in (token, x_admin_token):
+        raise HTTPException(401, "Missing or invalid admin token")
     if body.source not in _VALID_SOURCES:
         raise HTTPException(422, f"source must be one of {sorted(_VALID_SOURCES)}")
     background.add_task(run_source, body.source, body.full)

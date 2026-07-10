@@ -43,6 +43,8 @@ def _sqlite_add_missing_columns() -> None:
     wanted = [
         ("user_profiles", "background", "TEXT"),
         ("issues", "referenced_pr_numbers", "TEXT"),
+        ("issues", "embedded_model", "TEXT"),
+        ("pull_requests", "embedded_model", "TEXT"),
     ]
     with engine.begin() as conn:
         for table, column, coltype in wanted:

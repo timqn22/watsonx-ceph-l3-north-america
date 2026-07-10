@@ -22,11 +22,16 @@ logger = logging.getLogger(__name__)
 BATCH = 32
 
 
-def _needs_embedding(model):
+def _needs_embedding(model, model_id: str):
+    """Rows to (re)embed: never embedded, content changed, OR embedded by a
+    different model than the one now active (so switching backends re-embeds
+    instead of silently keeping stale vectors)."""
     return or_(
         model.embedding.is_(None),
         model.embedded_hash.is_(None),
         model.embedded_hash != model.content_hash,
+        model.embedded_model.is_(None),
+        model.embedded_model != model_id,
     )
 
 
@@ -45,6 +50,7 @@ def _embed_rows(session, embedder, rows, text_fn, label: str) -> int:
         for row, vec in zip(batch, vectors):
             row.embedding = vec
             row.embedded_hash = row.content_hash
+            row.embedded_model = embedder.model_id
         done = min(i + BATCH, n)
         # Commit + log every ~20 batches so long runs are durable and visible.
         if (i // BATCH) % 20 == 0 or done == n:
@@ -58,9 +64,14 @@ def refresh_embeddings(session: Session, embedder: Embedder | None = None) -> in
     """Embed all stale issues and PRs. Returns number of rows embedded."""
     embedder = embedder or get_embedder()
 
-    stale_issues = list(session.scalars(select(Issue).where(_needs_embedding(Issue))))
+    mid = embedder.model_id
+    stale_issues = list(
+        session.scalars(select(Issue).where(_needs_embedding(Issue, mid)))
+    )
     stale_prs = list(
-        session.scalars(select(PullRequest).where(_needs_embedding(PullRequest)))
+        session.scalars(
+            select(PullRequest).where(_needs_embedding(PullRequest, mid))
+        )
     )
     total = _embed_rows(
         session, embedder, stale_issues,

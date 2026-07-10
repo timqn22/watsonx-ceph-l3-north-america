@@ -61,6 +61,7 @@ class Issue(Base):
     # sha256 of subject+description; drives re-embedding.
     content_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     embedded_hash: Mapped[str | None] = mapped_column(String(64))
+    embedded_model: Mapped[str | None] = mapped_column(String(128))
     embedding: Mapped[list[float] | None] = mapped_column(JSON)
 
     scraped_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
@@ -91,6 +92,7 @@ class PullRequest(Base):
 
     content_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     embedded_hash: Mapped[str | None] = mapped_column(String(64))
+    embedded_model: Mapped[str | None] = mapped_column(String(128))
     embedding: Mapped[list[float] | None] = mapped_column(JSON)
 
     scraped_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

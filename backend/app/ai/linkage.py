@@ -193,6 +193,7 @@ def rebuild_suggestions(
     *,
     min_similarity: float,
     per_pr_limit: int = 3,
+    model_id: str | None = None,
 ) -> int:
     """Recompute the link_suggestions cache for all open, unlinked PRs.
 
@@ -247,7 +248,7 @@ def rebuild_suggestions(
                     pr_id=pr.id,
                     issue_id=m.issue_id,
                     similarity=m.similarity,
-                    model_id=None,
+                    model_id=model_id,
                     status="pending",
                 )
             )

@@ -19,9 +19,14 @@ logger = logging.getLogger(__name__)
 
 def _index_and_match(session) -> None:
     """Embed anything new, then recompute the suggestion cache."""
-    refresh_embeddings(session)
+    from ..ai.embedder import get_embedder
+
+    embedder = get_embedder()
+    refresh_embeddings(session, embedder)
     rebuild_suggestions(
-        session, min_similarity=get_settings().link_min_similarity
+        session,
+        min_similarity=get_settings().link_min_similarity,
+        model_id=embedder.model_id,
     )
 
 

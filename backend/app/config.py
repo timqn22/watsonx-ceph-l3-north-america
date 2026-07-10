@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     # If set, the /dashboard page requires ?token=<this>. Blank = open (fine on
     # localhost for a demo).
     dashboard_token: str | None = None
+    # If set, POST /admin/rescrape requires ?token=<this> (or X-Admin-Token
+    # header). Blank = open. This is a state-changing endpoint, so set it in any
+    # shared/hosted deployment.
+    admin_token: str | None = None
 
     @property
     def github_repo_list(self) -> list[str]:
