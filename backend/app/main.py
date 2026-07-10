@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
 from .api import router
+from .dashboard import router as dashboard_router
 from .db import init_db
 from .scheduler import shutdown_scheduler, start_scheduler
 
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(router)
+    app.include_router(dashboard_router)
     return app
 
 

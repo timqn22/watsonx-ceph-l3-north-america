@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     # --- Local ingest ---
     raw_issues_dir: str | None = None
 
+    # --- Dashboard ---
+    # If set, the /dashboard page requires ?token=<this>. Blank = open (fine on
+    # localhost for a demo).
+    dashboard_token: str | None = None
+
     @property
     def github_repo_list(self) -> list[str]:
         """Parse GITHUB_REPOS into a clean list of ``owner/name`` strings."""

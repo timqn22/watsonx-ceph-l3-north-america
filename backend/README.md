@@ -72,6 +72,14 @@ network, no credentials, no model downloads.
 | GET  | `/suggestions/links/for-pr/{id}` | suggested issues for one PR |
 | POST | `/suggestions/links/{id}/decision` | `{status: accepted\|rejected\|ignored}` |
 | POST | `/admin/rescrape` | `{source: redmine_open\|...}` force one cycle (demos) |
+| GET  | `/dashboard` | manager review queue as a web page (Accept/Ignore, coverage stats) |
+
+### Manager dashboard
+
+Open **http://localhost:8000/dashboard** in a browser: coverage tiles, the
+ranked missing-link queue with Accept/Ignore buttons, a similarity filter, and
+scrape health. Set `DASHBOARD_TOKEN` in `.env` to require `?token=<value>`;
+leave it blank for an open page on localhost.
 
 ## Layout
 
