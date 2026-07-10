@@ -9,7 +9,10 @@ import hashlib
 import re
 from typing import Any
 
-_ISSUE_REF_RE = re.compile(r"#(\d+)")
+# Matches both a bare "#12345" and a Redmine issue URL ".../issues/12345".
+# Ceph's convention is "Fixes: https://tracker.ceph.com/issues/12345", so the
+# URL form is the reliable already-linked signal; the "#id" form is a bonus.
+_ISSUE_REF_RE = re.compile(r"(?:/issues/|#)(\d+)")
 
 
 def content_hash(*parts: str | None) -> str:
@@ -29,10 +32,12 @@ def pr_embed_text(title: str | None, body: str | None) -> str:
 
 
 def parse_referenced_issue_ids(body: str | None) -> list[int]:
-    """Best-effort extraction of ``#1234`` references from a PR body.
+    """Extract already-referenced tracker issue ids from a PR body.
 
-    This is a placeholder linkage signal; the AI matcher is what finds the
-    *missing* links. Deduplicated, order-preserving.
+    Catches both ``#1234`` and Redmine URLs like
+    ``https://tracker.ceph.com/issues/1234`` (Ceph's ``Fixes:`` convention).
+    These are treated as existing links so the matcher only surfaces *missing*
+    ones. Deduplicated, order-preserving.
     """
     if not body:
         return []

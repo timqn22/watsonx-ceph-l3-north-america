@@ -15,6 +15,16 @@ def test_parse_referenced_issue_ids_dedupes_and_orders():
     assert parse_referenced_issue_ids("no refs here") == []
 
 
+def test_parse_referenced_issue_ids_matches_tracker_urls():
+    # Ceph's convention: a full tracker URL, not "#id".
+    body = "Fixes: https://tracker.ceph.com/issues/68450\nSigned-off-by: x"
+    assert parse_referenced_issue_ids(body) == [68450]
+    # URL and bare-ref forms dedupe to the same id.
+    assert parse_referenced_issue_ids(
+        "see https://tracker.ceph.com/issues/5 and #5"
+    ) == [5]
+
+
 def test_normalize_redmine_issue_marks_closed():
     raw = {
         "id": 5,
