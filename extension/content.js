@@ -386,7 +386,6 @@
       }
     };
 
-    prioritySel.addEventListener("change", () => load(false));
     refresh.addEventListener("click", () => load(false));
     rederive.addEventListener("click", (e) => {
       e.preventDefault();
