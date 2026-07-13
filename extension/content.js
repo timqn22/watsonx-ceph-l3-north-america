@@ -176,10 +176,11 @@
     return { text, projects, trackers, count: issues.length };
   }
 
-  // A multi-select of projects (checkbox dropdown), populated from the backend.
-  function buildProjectsFilter(base, onChange) {
+  // A reusable multi-select checkbox dropdown. `loadOptions` is an async fn
+  // returning [{value, label}]; used for priority, projects, and trackers.
+  function buildMultiFilter(labelText, loadOptions, onChange) {
     const details = el("details", { class: "ta-projfilter" });
-    const summary = el("summary", { class: "ta-projsummary" }, "Projects: any");
+    const summary = el("summary", { class: "ta-projsummary" }, labelText);
     const list = el(
       "div",
       { class: "ta-projlist" },
@@ -189,27 +190,27 @@
     const boxes = [];
     const refreshSummary = () => {
       const n = boxes.filter((b) => b.checked).length;
-      summary.textContent = n ? `Projects: ${n} selected` : "Projects: any";
+      summary.textContent = n ? `${labelText}: ${n}` : labelText;
     };
     (async () => {
-      let projs = [];
+      let opts = [];
       try {
-        projs = await api(base, "/projects");
+        opts = await loadOptions();
       } catch (e) {
         /* leave empty */
       }
-      if (!projs.length) {
-        return list.replaceChildren(el("div", { class: "ta-note" }, "No projects loaded"));
+      if (!opts.length) {
+        return list.replaceChildren(el("div", { class: "ta-note" }, "None available"));
       }
       list.replaceChildren(
-        ...projs.map((p) => {
-          const cb = el("input", { type: "checkbox", value: p.name });
+        ...opts.map((o) => {
+          const cb = el("input", { type: "checkbox", value: o.value });
           cb.addEventListener("change", () => {
             refreshSummary();
             onChange();
           });
           boxes.push(cb);
-          return el("label", { class: "ta-projitem" }, cb, ` ${p.name} (${p.open_issues})`);
+          return el("label", { class: "ta-projitem" }, cb, ` ${o.label}`);
         })
       );
     })();
@@ -270,23 +271,42 @@
       return { mode: "auto", count: act.count };
     }
 
-    // Source note (how the profile was built) + filter row.
+    // Source note (how the profile was built) + filter row. All three filters
+    // are multi-select; leaving one empty falls back to your saved areas.
     const note = el("div", { class: "ta-source" }, `Signed in as ${user}.`);
-    const prioritySel = el(
-      "select",
-      { class: "ta-select" },
-      el("option", { value: "" }, "Any priority"),
-      ...PRIORITIES.map((p) => el("option", { value: p }, p))
+    const onFilterChange = () => load(false);
+    const priorityFilter = buildMultiFilter(
+      "Priority",
+      async () => PRIORITIES.map((p) => ({ value: p, label: p })),
+      onFilterChange
+    );
+    const projectFilter = buildMultiFilter(
+      "Projects",
+      async () =>
+        (await api(base, "/projects")).map((p) => ({
+          value: p.name,
+          label: `${p.name} (${p.open_issues})`,
+        })),
+      onFilterChange
+    );
+    const trackerFilter = buildMultiFilter(
+      "Trackers",
+      async () =>
+        (await api(base, "/trackers")).map((t) => ({
+          value: t.name,
+          label: `${t.name} (${t.open_issues})`,
+        })),
+      onFilterChange
     );
     const refresh = el("button", { class: "ta-refresh" }, "Refresh");
     const rederive = el("a", { class: "ta-relink", href: "#" }, "Rebuild from my activity");
-    const projFilter = buildProjectsFilter(base, () => load(false));
     const controls = el(
       "div",
       { class: "ta-controls" },
-      el("label", {}, "Priority"),
-      prioritySel,
-      projFilter.element,
+      el("label", {}, "Filters"),
+      priorityFilter.element,
+      projectFilter.element,
+      trackerFilter.element,
       refresh,
       rederive
     );
@@ -309,16 +329,18 @@
       describeMode(mode);
       if (mode.mode === "none") return banner(results, "");
       banner(results, "Ranking issues…");
-      const priorities = prioritySel.value ? [prioritySel.value] : null;
-      // Selected projects (empty array = all projects, which the backend honors
-      // as an explicit "no project filter").
-      const projects = projFilter.selected();
+      // Empty selection -> null, so the backend narrows to your saved areas by
+      // default. A non-empty selection scopes the ranking to those values.
+      const orNull = (a) => (a.length ? a : null);
+      const priorities = orNull(priorityFilter.selected());
+      const projects = orNull(projectFilter.selected());
+      const trackers = orNull(trackerFilter.selected());
       let recs;
       try {
         recs = await api(base, "/recommendations/issues", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user, priorities, projects, limit: 12 }),
+          body: JSON.stringify({ user, priorities, projects, trackers, limit: 12 }),
         });
       } catch (e) {
         return banner(

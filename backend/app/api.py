@@ -130,6 +130,19 @@ def list_projects(session: Session = Depends(get_session)) -> list[ProjectOut]:
     return [ProjectOut(name=name, open_issues=count) for name, count in rows]
 
 
+@router.get("/trackers", response_model=list[ProjectOut])
+def list_trackers(session: Session = Depends(get_session)) -> list[ProjectOut]:
+    """Distinct tracker types among open issues, with counts (for the filter UI)."""
+    rows = session.execute(
+        select(Issue.tracker_name, func.count())
+        .where(Issue.is_open.is_(True))
+        .where(Issue.tracker_name.is_not(None))
+        .group_by(Issue.tracker_name)
+        .order_by(func.count().desc())
+    ).all()
+    return [ProjectOut(name=name, open_issues=count) for name, count in rows]
+
+
 @router.get("/pulls", response_model=list[PullRequestOut])
 def list_pulls(
     limit: int = Query(50, le=200),
@@ -275,15 +288,20 @@ def recommend(
         raise HTTPException(422, "No skill_prompt provided and no profile saved yet")
 
     exclude = None if body.include_in_progress else in_progress_issue_ids(session)
-    # An explicit list (even empty) from the caller wins; empty means "all
-    # projects". Only fall back to the saved preference when unspecified (None).
+    # For each facet: an explicit list from the caller wins (even empty = "all");
+    # None falls back to the saved preference. This lets the UI narrow by default
+    # (send None -> the user's areas) while still supporting an explicit "all".
     projects = body.projects if body.projects is not None else profile.preferred_projects
+    trackers = body.trackers if body.trackers is not None else profile.preferred_trackers
+    priorities = (
+        body.priorities if body.priorities is not None else profile.preferred_priorities
+    )
     recs = recommend_issues(
         session,
         skill_prompt=skill_prompt,
         projects=projects,
-        trackers=body.trackers or profile.preferred_trackers,
-        priorities=body.priorities or profile.preferred_priorities,
+        trackers=trackers,
+        priorities=priorities,
         limit=body.limit,
         exclude_issue_ids=exclude,
     )
