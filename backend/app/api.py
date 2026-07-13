@@ -27,6 +27,7 @@ from .schemas import (
     LinkSuggestionOut,
     ProfileIn,
     ProfileOut,
+    ProjectOut,
     PullRequestOut,
     RecommendationOut,
     RecommendIn,
@@ -113,6 +114,20 @@ def list_issues(
             select(Issue).order_by(Issue.updated_on.desc()).limit(limit)
         )
     )
+
+
+@router.get("/projects", response_model=list[ProjectOut])
+def list_projects(session: Session = Depends(get_session)) -> list[ProjectOut]:
+    """Distinct project names among open issues, with counts (for the filter UI),
+    most active first."""
+    rows = session.execute(
+        select(Issue.project_name, func.count())
+        .where(Issue.is_open.is_(True))
+        .where(Issue.project_name.is_not(None))
+        .group_by(Issue.project_name)
+        .order_by(func.count().desc())
+    ).all()
+    return [ProjectOut(name=name, open_issues=count) for name, count in rows]
 
 
 @router.get("/pulls", response_model=list[PullRequestOut])
@@ -260,10 +275,13 @@ def recommend(
         raise HTTPException(422, "No skill_prompt provided and no profile saved yet")
 
     exclude = None if body.include_in_progress else in_progress_issue_ids(session)
+    # An explicit list (even empty) from the caller wins; empty means "all
+    # projects". Only fall back to the saved preference when unspecified (None).
+    projects = body.projects if body.projects is not None else profile.preferred_projects
     recs = recommend_issues(
         session,
         skill_prompt=skill_prompt,
-        projects=body.projects or profile.preferred_projects,
+        projects=projects,
         trackers=body.trackers or profile.preferred_trackers,
         priorities=body.priorities or profile.preferred_priorities,
         limit=body.limit,

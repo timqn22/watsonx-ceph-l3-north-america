@@ -77,6 +77,25 @@ def test_assigned_issues_are_not_recommended(session):
     assert 1 in ids and 2 not in ids  # assigned issue #2 is excluded
 
 
+def test_explicit_project_filter_overrides(session):
+    _issue(session, 1, "bluestore perf", "counters", project="bluestore")
+    _issue(session, 2, "bluestore perf other", "counters", project="RADOS")
+    session.commit()
+    refresh_embeddings(session)
+
+    # Only RADOS selected -> only the RADOS issue, ranked by similarity as usual.
+    recs = recommend_issues(
+        session, skill_prompt="bluestore perf counters", projects=["RADOS"], stretch=0
+    )
+    assert {r.issue_id for r in recs} == {2}
+
+    # No project filter -> both projects considered.
+    recs_all = recommend_issues(
+        session, skill_prompt="bluestore perf counters", projects=None, stretch=0
+    )
+    assert {r.issue_id for r in recs_all} == {1, 2}
+
+
 def test_profile_roundtrip_and_empty_prompt(session):
     profile = get_or_create_profile(session)
     assert profile.external_id == "me"

@@ -158,6 +158,11 @@ class InProgressOut(BaseModel):
     pr_url: str | None = None
 
 
+class ProjectOut(BaseModel):
+    name: str
+    open_issues: int
+
+
 class JobInfo(BaseModel):
     name: str
     next_run_time: str | None = None

@@ -22,6 +22,27 @@
 .ta-note { color: #57606a; padding: 8px 2px; }
 
 .ta-source { color: #57606a; font-size: 12px; margin-bottom: 8px; }
+.ta-projfilter { position: relative; }
+.ta-projsummary {
+  list-style: none; cursor: pointer; padding: 5px 10px; border: 1px solid #d0d7de;
+  border-radius: 6px; background: #fff; color: #1f2328; font-size: 13px; white-space: nowrap;
+}
+.ta-projsummary::-webkit-details-marker { display: none; }
+.ta-projsummary::after { content: " ▾"; color: #8b949e; }
+.ta-projlist {
+  position: absolute; z-index: 10; margin-top: 4px; max-height: 260px; overflow-y: auto;
+  min-width: 220px; background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
+  padding: 6px; box-shadow: 0 6px 20px rgba(0,0,0,.15);
+}
+.ta-projitem { display: flex; align-items: center; gap: 4px; padding: 4px 6px;
+  font-size: 13px; color: #1f2328; border-radius: 5px; cursor: pointer; }
+.ta-projitem:hover { background: #f2f4f7; }
+@media (prefers-color-scheme: dark) {
+  .ta-projsummary { background: #1c2029; color: #e7e9ee; border-color: #333a47; }
+  .ta-projlist { background: #171a22; border-color: #2a2f3a; }
+  .ta-projitem { color: #e7e9ee; }
+  .ta-projitem:hover { background: #22262f; }
+}
 .ta-relink { color: #0969da; font-size: 12px; text-decoration: none; margin-left: auto; }
 .ta-relink:hover { text-decoration: underline; }
 .ta-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }

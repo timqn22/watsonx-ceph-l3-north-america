@@ -176,6 +176,49 @@
     return { text, projects, trackers, count: issues.length };
   }
 
+  // A multi-select of projects (checkbox dropdown), populated from the backend.
+  function buildProjectsFilter(base, onChange) {
+    const details = el("details", { class: "ta-projfilter" });
+    const summary = el("summary", { class: "ta-projsummary" }, "Projects: any");
+    const list = el(
+      "div",
+      { class: "ta-projlist" },
+      el("div", { class: "ta-note" }, "Loading…")
+    );
+    details.append(summary, list);
+    const boxes = [];
+    const refreshSummary = () => {
+      const n = boxes.filter((b) => b.checked).length;
+      summary.textContent = n ? `Projects: ${n} selected` : "Projects: any";
+    };
+    (async () => {
+      let projs = [];
+      try {
+        projs = await api(base, "/projects");
+      } catch (e) {
+        /* leave empty */
+      }
+      if (!projs.length) {
+        return list.replaceChildren(el("div", { class: "ta-note" }, "No projects loaded"));
+      }
+      list.replaceChildren(
+        ...projs.map((p) => {
+          const cb = el("input", { type: "checkbox", value: p.name });
+          cb.addEventListener("change", () => {
+            refreshSummary();
+            onChange();
+          });
+          boxes.push(cb);
+          return el("label", { class: "ta-projitem" }, cb, ` ${p.name} (${p.open_issues})`);
+        })
+      );
+    })();
+    return {
+      element: details,
+      selected: () => boxes.filter((b) => b.checked).map((b) => b.value),
+    };
+  }
+
   // ---- Listing / My page: recommendations ------------------------------
   async function recommendPanel(base, settingsUser) {
     const body = mountPanel(
@@ -237,11 +280,13 @@
     );
     const refresh = el("button", { class: "ta-refresh" }, "Refresh");
     const rederive = el("a", { class: "ta-relink", href: "#" }, "Rebuild from my activity");
+    const projFilter = buildProjectsFilter(base, () => load(false));
     const controls = el(
       "div",
       { class: "ta-controls" },
       el("label", {}, "Priority"),
       prioritySel,
+      projFilter.element,
       refresh,
       rederive
     );
@@ -265,12 +310,15 @@
       if (mode.mode === "none") return banner(results, "");
       banner(results, "Ranking issues…");
       const priorities = prioritySel.value ? [prioritySel.value] : null;
+      // Selected projects (empty array = all projects, which the backend honors
+      // as an explicit "no project filter").
+      const projects = projFilter.selected();
       let recs;
       try {
         recs = await api(base, "/recommendations/issues", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user, priorities, limit: 12 }),
+          body: JSON.stringify({ user, priorities, projects, limit: 12 }),
         });
       } catch (e) {
         return banner(
