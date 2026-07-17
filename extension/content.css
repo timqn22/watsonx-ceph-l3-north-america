@@ -1,0 +1,168 @@
+/* TrackerAssist injected panels. All classes are ta- prefixed so they never
+   collide with Redmine's own styles. Deliberately self-contained. */
+
+.ta-panel {
+  border: 1px solid #d0d7de;
+  border-left: 4px solid #3a7bd5;
+  border-radius: 8px;
+  background: #fbfcfe;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  font: 13px/1.5 -apple-system, Segoe UI, Roboto, sans-serif;
+  color: #1f2328;
+}
+.ta-head { display: flex; align-items: center; gap: 8px; }
+.ta-logo {
+  font-size: 11px; font-weight: 700; letter-spacing: .03em;
+  color: #fff; background: #3a7bd5; border-radius: 4px; padding: 2px 6px;
+}
+.ta-title { font-size: 14px; font-weight: 600; }
+.ta-sub { color: #57606a; font-size: 12px; margin: 3px 0 8px; }
+.ta-body { display: flex; flex-direction: column; gap: 8px; }
+.ta-note { color: #57606a; padding: 8px 2px; }
+
+.ta-source { color: #57606a; font-size: 12px; margin-bottom: 8px; }
+.ta-projfilter { position: relative; }
+.ta-projsummary {
+  list-style: none; cursor: pointer; padding: 5px 10px; border: 1px solid #d0d7de;
+  border-radius: 6px; background: #fff; color: #1f2328; font-size: 13px; white-space: nowrap;
+}
+.ta-projsummary::-webkit-details-marker { display: none; }
+.ta-projsummary::after { content: " ▾"; color: #8b949e; }
+.ta-projlist {
+  position: absolute; z-index: 10; margin-top: 4px; max-height: 260px; overflow-y: auto;
+  min-width: 220px; background: #fff; border: 1px solid #d0d7de; border-radius: 8px;
+  padding: 6px; box-shadow: 0 6px 20px rgba(0,0,0,.15);
+}
+.ta-projitem { display: flex; align-items: center; gap: 4px; padding: 4px 6px;
+  font-size: 13px; color: #1f2328; border-radius: 5px; cursor: pointer; }
+.ta-projitem:hover { background: #f2f4f7; }
+@media (prefers-color-scheme: dark) {
+  .ta-projsummary { background: #1c2029; color: #e7e9ee; border-color: #333a47; }
+  .ta-projlist { background: #171a22; border-color: #2a2f3a; }
+  .ta-projitem { color: #e7e9ee; }
+  .ta-projitem:hover { background: #22262f; }
+}
+.ta-relink { color: #0969da; font-size: 12px; text-decoration: none; margin-left: auto; }
+.ta-relink:hover { text-decoration: underline; }
+.ta-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ta-controls label { color: #57606a; font-size: 12px; }
+.ta-select {
+  padding: 5px 8px; border: 1px solid #d0d7de; border-radius: 6px;
+  background: #fff; color: #1f2328; font: inherit;
+}
+.ta-refresh, .ta-ok, .ta-no {
+  cursor: pointer; border: 1px solid #d0d7de; border-radius: 6px;
+  padding: 5px 12px; font: inherit; background: #f6f8fa; color: #1f2328;
+}
+.ta-refresh:hover { background: #eaeef2; }
+.ta-ok:hover { background: #e6f4ea; border-color: #2f9e5f; }
+.ta-no:hover { background: #fbe9ec; border-color: #d3495c; }
+
+.ta-results { display: flex; flex-direction: column; gap: 8px; }
+.ta-card {
+  display: flex; gap: 12px; align-items: flex-start;
+  border: 1px solid #e4e8ec; border-radius: 7px; padding: 9px 11px; background: #fff;
+}
+.ta-card-stretch { border-left: 3px solid #d9a441; }
+.ta-done { opacity: .4; transition: opacity .3s; }
+
+.ta-sim { flex: 0 0 60px; }
+.ta-bar { height: 6px; background: #eaeef2; border-radius: 4px; overflow: hidden; }
+.ta-bar span { display: block; height: 100%; background: linear-gradient(90deg, #3a7bd5, #7cc5ff); }
+.ta-simn { font-size: 11px; color: #57606a; margin-top: 3px; }
+
+.ta-score { flex: 0 0 52px; text-align: center; }
+.ta-scoren { font-size: 20px; font-weight: 700; color: #1f2328; }
+.ta-scorel { font-size: 10px; color: #8b949e; text-transform: uppercase; }
+
+.ta-info { flex: 1; min-width: 0; }
+.ta-link { color: #0969da; text-decoration: none; font-weight: 500; }
+.ta-link:hover { text-decoration: underline; }
+.ta-desc, .ta-why { color: #57606a; font-size: 12px; margin-top: 3px; }
+.ta-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+.ta-tag {
+  font-size: 11px; color: #57606a; background: #f0f3f6;
+  border: 1px solid #e0e4e8; border-radius: 11px; padding: 1px 8px;
+}
+.ta-stretch { color: #9a6b12; background: #fdf3df; border-color: #efd9a8; }
+.ta-warn { color: #b3541e; background: #fdece0; border-color: #f0c9a8; }
+@media (prefers-color-scheme: dark) {
+  .ta-warn { color: #f0a878; background: #2a1a10; border-color: #6a4020; }
+}
+.ta-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.ta-relbadge { flex: 0 0 60px; font-size: 11px; font-weight: 600; text-align: center;
+  border-radius: 6px; padding: 4px 2px; }
+.ta-linked { color: #1a7f37; background: #dafbe1; border: 1px solid #aadfba; }
+@media (prefers-color-scheme: dark) {
+  .ta-linked { color: #5fd18b; background: #14261a; border-color: #2f6f47; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .ta-panel { background: #171a22; border-color: #2a2f3a; color: #e7e9ee; }
+  .ta-sub, .ta-note, .ta-desc, .ta-why, .ta-simn { color: #9aa2b1; }
+  .ta-card { background: #12151c; border-color: #262a33; }
+  .ta-select, .ta-refresh, .ta-ok, .ta-no { background: #1c2029; color: #e7e9ee; border-color: #333a47; }
+  .ta-scoren { color: #e7e9ee; }
+  .ta-tag { background: #1c2029; color: #9aa2b1; border-color: #2a2f3a; }
+  .ta-bar, .ta-controls label { color: #9aa2b1; }
+}
+
+/* Search form styles */
+.ta-search-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ta-search-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #fff;
+  color: #1f2328;
+  font: inherit;
+  font-size: 13px;
+}
+
+.ta-search-input:focus {
+  outline: none;
+  border-color: #3a7bd5;
+  box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.1);
+}
+
+.ta-search-btn {
+  cursor: pointer;
+  border: 1px solid #3a7bd5;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  background: #3a7bd5;
+  color: #fff;
+  transition: background 0.2s;
+}
+
+.ta-search-btn:hover {
+  background: #2d5fa8;
+}
+
+.ta-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ta-search-input {
+    background: #1c2029;
+    color: #e7e9ee;
+    border-color: #333a47;
+  }
+  .ta-search-input:focus {
+    border-color: #3a7bd5;
+    box-shadow: 0 0 0 3px rgba(58, 123, 213, 0.2);
+  }
+}

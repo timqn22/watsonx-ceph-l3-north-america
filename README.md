@@ -11,6 +11,10 @@ A powerful tool to scrape issues from the Ceph Redmine tracker and perform seman
 - 📊 **Rich Metadata**: Preserve issue details, status, priority, and more
 - 🔄 **Incremental Updates**: Update individual issues without re-scraping everything
 - 🎯 **Flexible Filtering**: Filter by status, priority, project, and more
+- 🔗 **GitHub PR Monitoring**: Automatically link GitHub PRs to similar Redmine issues
+- 🌐 **Web Interface**: Browser-based search interface
+- 🖥️ **REST API**: HTTP API for programmatic access
+- 🧩 **Browser Extension**: Chrome/Edge extension to view related PRs directly on Redmine tracker pages
 
 ## Architecture
 
@@ -247,6 +251,100 @@ python cli.py reset
 ```
 
 ⚠️ This will delete all issues from the vector database!
+### GitHub PR Monitoring
+
+Monitor GitHub PRs and automatically find similar Redmine issues:
+
+#### Option 1: Continuous Server (Recommended)
+
+Run as a background service with REST API:
+
+```bash
+# Start server with auto-monitoring (checks every 15 minutes)
+python3 pr_monitor_server.py --autostart
+
+# Or start server and control via API
+python3 pr_monitor_server.py
+curl -X POST http://localhost:8001/start
+```
+
+**API Endpoints:**
+- `GET /status` - Get monitoring status
+- `POST /start` - Start monitoring
+- `POST /stop` - Stop monitoring
+- `POST /check-now` - Trigger immediate check
+- `GET /results` - Get PR-issue links
+
+See [PR_SERVER_GUIDE.md](PR_SERVER_GUIDE.md) for full documentation.
+
+#### Option 2: CLI Script
+
+Run one-time or scheduled checks:
+
+```bash
+# Check last 15 minutes
+python3 monitor_prs.py
+
+# Check last 60 minutes
+python3 monitor_prs.py once 60
+
+# Monitor continuously (checks every 15 minutes)
+python3 monitor_prs.py continuous 15
+```
+
+See [PR_MONITORING_GUIDE.md](PR_MONITORING_GUIDE.md) for details.
+
+### Web Interface
+
+Launch the web-based search interface:
+
+```bash
+python3 web_app.py
+```
+
+Then open http://localhost:5000 in your browser.
+
+### HTTP API Server
+
+Start the REST API server:
+
+```bash
+python3 api_server.py
+```
+
+**Endpoints:**
+- `GET /search?q=query` - Search for similar issues
+- `GET /similar/<id>` - Find issues similar to a specific issue
+- `GET /stats` - Get database statistics
+- `GET /health` - Health check
+
+See [API_SERVER_GUIDE.md](API_SERVER_GUIDE.md) for full API documentation.
+
+### Browser Extension
+
+View related GitHub PRs directly on Redmine tracker pages:
+
+1. **Start the API server** (required for the extension):
+```bash
+python3 api_server.py
+```
+
+2. **Load the extension** in Chrome/Edge:
+   - Open `chrome://extensions/` (or `edge://extensions/`)
+   - Enable "Developer mode"
+   - Click "Load unpacked"
+   - Select the `extension/` directory
+
+3. **Visit any Ceph issue** on tracker.ceph.com to see related PRs automatically displayed
+
+The extension shows:
+- Related GitHub PRs with similarity scores
+- PR status (open/closed/merged)
+- PR labels and authors
+- Direct links to PRs
+
+See [EXTENSION_SETUP.md](EXTENSION_SETUP.md) for comprehensive setup instructions and troubleshooting.
+
 
 ## Configuration
 
