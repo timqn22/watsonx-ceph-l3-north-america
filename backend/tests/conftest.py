@@ -22,7 +22,11 @@ from app.db import Base, SessionLocal, engine  # noqa: E402
 
 @pytest.fixture()
 def session():
+    from app.ai import index_cache
+
+    index_cache.invalidate()  # no snapshot carryover between tests
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as s:
         yield s
     Base.metadata.drop_all(bind=engine)
+    index_cache.invalidate()

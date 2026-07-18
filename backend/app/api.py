@@ -13,8 +13,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .ai import index_cache
 from .ai.embedder import get_embedder
-from .ai.linkage import related_prs_for_issue
+from .ai.linkage import related_prs_for_issue, similar_trackers_for_issue
+from .ai.reranker import get_reranker
+from .ai.scoring import components_for
 from .config import get_settings
 from .db import get_session
 from .models import Issue, LinkSuggestion, PullRequest
@@ -32,12 +35,17 @@ from .schemas import (
     RecommendationOut,
     RecommendIn,
     RelatedPrOut,
+    SimilarIssueOut,
     RescrapeIn,
 )
 from .scheduler import get_scheduler
 from .services.pipeline import run_source
-from .services.recommendations import get_or_create_profile, recommend_issues
-from .services.work_status import in_progress_issue_ids, in_progress_map
+from .services.recommendations import (
+    get_or_create_profile,
+    recommend_issues,
+    resolve_query_vector,
+)
+from .services.work_status import in_progress_map
 
 router = APIRouter()
 
@@ -91,6 +99,7 @@ def health(session: Session = Depends(get_session)) -> HealthOut:
         status="ok" if db_ok else "degraded",
         db_ok=db_ok,
         embedder=get_embedder().model_id,
+        reranker=get_reranker().model_id,
         watsonx_configured=get_settings().watsonx_configured,
         issues=session.scalar(select(func.count()).select_from(Issue)) or 0,
         pull_requests=session.scalar(select(func.count()).select_from(PullRequest)) or 0,
@@ -100,6 +109,8 @@ def health(session: Session = Depends(get_session)) -> HealthOut:
             .where(LinkSuggestion.status == "pending")
         )
         or 0,
+        snapshot_cache=index_cache.cache_stats(),
+        embed_cache=getattr(get_embedder(), "cache_stats", lambda: {})(),
         jobs=jobs,
     )
 
@@ -279,32 +290,87 @@ def recommend(
     body: RecommendIn, session: Session = Depends(get_session)
 ) -> list[RecommendationOut]:
     profile = get_or_create_profile(session, body.user or "me")
-    if body.skill_prompt is not None:
-        skill_prompt = body.skill_prompt
-    else:
-        # Fold the saved background/previous-projects into the skill text.
-        skill_prompt = _effective_prompt(profile.skill_prompt, profile.background)
-    if not skill_prompt.strip():
-        raise HTTPException(422, "No skill_prompt provided and no profile saved yet")
+    # Selected facets are the only hard filters; unselected impose none. Applies
+    # to both search and profile modes so search works *alongside* the filters.
+    any_selected = any(
+        f is not None for f in (body.projects, body.trackers, body.priorities)
+    )
 
-    exclude = None if body.include_in_progress else in_progress_issue_ids(session)
-    # For each facet: an explicit list from the caller wins (even empty = "all");
-    # None falls back to the saved preference. This lets the UI narrow by default
-    # (send None -> the user's areas) while still supporting an explicit "all".
-    projects = body.projects if body.projects is not None else profile.preferred_projects
-    trackers = body.trackers if body.trackers is not None else profile.preferred_trackers
-    priorities = (
-        body.priorities if body.priorities is not None else profile.preferred_priorities
-    )
-    recs = recommend_issues(
-        session,
-        skill_prompt=skill_prompt,
-        projects=projects,
-        trackers=trackers,
-        priorities=priorities,
-        limit=body.limit,
-        exclude_issue_ids=exclude,
-    )
+    if body.query and body.query.strip():
+        # --- Search mode: rank by the query (free text and/or "tracker NNNNN"),
+        #     not the profile. Searches ALL issues (open + closed) so a closed or
+        #     claimed tracker is still findable. `only_unclaimed` narrows to open,
+        #     unassigned, not-in-progress work. ---
+        qvec, exclude_refs, reason_text = resolve_query_vector(
+            session, body.query, get_embedder()
+        )
+        projects = body.projects if any_selected else None
+        trackers = body.trackers if any_selected else None
+        priorities = body.priorities if any_selected else None
+        recs = recommend_issues(
+            session,
+            skill_prompt=reason_text,
+            query_vector=qvec,
+            projects=projects,
+            trackers=trackers,
+            priorities=priorities,
+            limit=body.limit,
+            stretch=0,
+            exclude_issue_ids=exclude_refs,
+            # `only_unclaimed` hides exactly what the result badges flag: an
+            # assignee or a linked PR. Closed issues stay searchable either way --
+            # a search should find any tracker, claimed filter is separate.
+            exclude_assigned=body.only_unclaimed,
+            exclude_linked=body.only_unclaimed,
+            include_closed=True,
+            lexical_weight=get_settings().search_lexical_weight,
+        )
+    else:
+        if body.skill_prompt is not None:
+            skill_prompt = body.skill_prompt
+        else:
+            # Fold the saved background/previous-projects into the skill text.
+            skill_prompt = _effective_prompt(profile.skill_prompt, profile.background)
+        if not skill_prompt.strip():
+            raise HTTPException(422, "No skill_prompt provided and no profile saved yet")
+
+        # Component affinity from the user's historical projects (a small ranking
+        # boost so familiar-area work floats up even in a broad search).
+        affinity: set[str] = set()
+        for proj in profile.preferred_projects or []:
+            affinity |= components_for(proj)
+        # No facet selected -> fall back to the profile's saved areas
+        # (narrow-by-default). The profile always drives the ranking regardless.
+        if any_selected:
+            projects, trackers, priorities = body.projects, body.trackers, body.priorities
+        else:
+            projects = profile.preferred_projects
+            trackers = profile.preferred_trackers
+            priorities = profile.preferred_priorities
+        recs = recommend_issues(
+            session,
+            skill_prompt=skill_prompt,
+            projects=projects,
+            trackers=trackers,
+            priorities=priorities,
+            limit=body.limit,
+            # Same claim filter as search: `only_unclaimed` hides assigned /
+            # PR-linked work in every mode. Unchecked -> shown with badges.
+            exclude_assigned=body.only_unclaimed,
+            exclude_linked=body.only_unclaimed,
+            affinity_components=affinity,
+            affinity_weight=get_settings().rec_component_weight,
+        )
+
+    # Flag results that aren't actually free work: a PR is linked to the tracker
+    # (either direction) or it already has an assignee. O(results) against the
+    # cached reference index -- no scan.
+    snap = index_cache.get_snapshot(session)
+
+    def _has_linked_pr(issue) -> bool:
+        if snap.pr_ref_index.get(issue.id):
+            return True  # a PR references this tracker
+        return any(snap.pr_by_number.get(n) for n in (issue.referenced_pr_numbers or []))
 
     out: list[RecommendationOut] = []
     for r in recs:
@@ -321,6 +387,8 @@ def recommend(
                 priority=issue.priority if issue else None,
                 project_name=issue.project_name if issue else None,
                 url=issue.url if issue else None,
+                assignee=issue.assignee_login if issue else None,
+                has_linked_pr=_has_linked_pr(issue) if issue else False,
             )
         )
     return out
@@ -328,15 +396,27 @@ def recommend(
 
 @router.get("/issues/{issue_id}/related-prs", response_model=list[RelatedPrOut])
 def related_prs(
-    issue_id: int, session: Session = Depends(get_session)
+    issue_id: int,
+    pr_numbers: str | None = Query(None),
+    session: Session = Depends(get_session),
 ) -> list[RelatedPrOut]:
     """All PRs related to an issue: already-linked ones plus likely matches,
-    across open/merged/closed — for the extension's issue-page panel."""
+    across open/merged/closed — for the extension's issue-page panel.
+
+    ``pr_numbers`` is an optional comma-separated list of PR numbers the caller
+    found on the page (e.g. links in the issue's comments), treated as
+    tracker-side links so comment-only references are recognized too."""
     issue = session.get(Issue, issue_id)
     if issue is None:
         raise HTTPException(404, "issue not found")
+    extra: set[int] = set()
+    if pr_numbers:
+        for tok in pr_numbers.split(","):
+            tok = tok.strip()
+            if tok.isdigit():
+                extra.add(int(tok))
     out: list[RelatedPrOut] = []
-    for r in related_prs_for_issue(session, issue):
+    for r in related_prs_for_issue(session, issue, extra_pr_numbers=extra):
         out.append(
             RelatedPrOut(
                 relationship=r.relationship,
@@ -348,9 +428,40 @@ def related_prs(
                 pr_title=r.pr.title,
                 pr_url=r.pr.url,
                 state=r.pr.state,
+                via_issue_id=r.via_issue_id,
+                via_issue_subject=r.via_issue_subject,
             )
         )
     return out
+
+
+@router.get("/issues/{issue_id}/similar", response_model=list[SimilarIssueOut])
+def similar_issues(
+    issue_id: int,
+    session: Session = Depends(get_session),
+) -> list[SimilarIssueOut]:
+    """Trackers highly similar to this one -- the possible-duplicate warning.
+
+    High-precision by design (DUPLICATE_MIN_SIMILARITY); returns empty for most
+    issues, so the extension only shows a warning when it means it."""
+    issue = session.get(Issue, issue_id)
+    if issue is None:
+        raise HTTPException(404, "issue not found")
+    return [
+        SimilarIssueOut(
+            issue_id=s.issue.id,
+            subject=s.issue.subject,
+            url=s.issue.url,
+            project_name=s.issue.project_name,
+            tracker_name=s.issue.tracker_name,
+            status=s.issue.status,
+            is_open=bool(s.issue.is_open),
+            assignee=s.issue.assignee_login,
+            similarity=round(s.similarity, 4),
+            confidence=round(s.confidence, 4),
+        )
+        for s in similar_trackers_for_issue(session, issue)
+    ]
 
 
 @router.get("/issues/in-progress", response_model=list[InProgressOut])

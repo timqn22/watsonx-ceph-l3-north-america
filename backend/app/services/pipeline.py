@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 def _index_and_match(session) -> None:
     """Embed anything new, then recompute the suggestion cache."""
     from ..ai.embedder import get_embedder
+    from ..ai.index_cache import get_snapshot
 
     embedder = get_embedder()
     refresh_embeddings(session, embedder)
@@ -28,6 +29,9 @@ def _index_and_match(session) -> None:
         min_similarity=get_settings().link_min_similarity,
         model_id=embedder.model_id,
     )
+    # Warm the read cache in this background thread so no user request pays the
+    # (multi-second, at scale) rebuild after a scrape.
+    get_snapshot(session)
 
 
 def run_open_cycle() -> None:

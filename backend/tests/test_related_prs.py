@@ -39,7 +39,8 @@ def test_already_linked_pr_is_shown(session):
 
 
 def test_linked_pr_suppresses_speculative_matches(session):
-    # A real link plus a lookalike PR -> show only the linked one.
+    # A real link plus a lookalike PR -> show only the linked one. A recorded
+    # link is the answer; speculative matches alongside it just add noise.
     _issue(session, 1, "rbd mirror snapshot replayer stuck", "replayer sync")
     _pr(session, "PR_link", 100, "rbd mirror fix",
         "Fixes: https://tracker.ceph.com/issues/1", referenced=[1], state="merged")
@@ -48,7 +49,7 @@ def test_linked_pr_suppresses_speculative_matches(session):
     session.commit()
     refresh_embeddings(session)
 
-    rel = related_prs_for_issue(session, session.get(Issue, 1))
+    rel = related_prs_for_issue(session, session.get(Issue, 1), min_similarity=0.0)
     assert {r.pr.number for r in rel} == {100}
     assert all(r.relationship == "linked" for r in rel)
 
@@ -91,6 +92,58 @@ def test_tracker_side_link_marks_pr_linked(session):
     assert rel[0].pr.number == 46912
 
 
+def test_extra_pr_numbers_from_page_count_as_linked(session):
+    # Issue has no stored PR reference (e.g. the link was only in a comment),
+    # but the caller passes the PR number it found on the page.
+    _issue(session, 5, "some osd bug", "no reference stored here")
+    _pr(session, "PR_x", 46912, "osd fix", "no tracker reference")
+    session.commit()
+    refresh_embeddings(session)
+
+    # Without the hint -> not linked (at most a weak suggestion).
+    plain = related_prs_for_issue(session, session.get(Issue, 5))
+    assert not any(r.relationship == "linked" for r in plain)
+
+    # With the page-scanned PR number -> linked (tracker side).
+    rel = related_prs_for_issue(
+        session, session.get(Issue, 5), extra_pr_numbers={46912}
+    )
+    assert rel[0].relationship == "linked"
+    assert rel[0].link_direction == "tracker"
+    assert rel[0].pr.number == 46912
+
+
+def test_duplicate_warning_flags_near_identical_tracker(session, monkeypatch):
+    # A new report nearly identical to an existing (closed) tracker is flagged;
+    # an unrelated issue is not. Closed duplicates matter most -- "already fixed".
+    from app.ai.linkage import similar_trackers_for_issue
+    from app.config import get_settings
+
+    _issue(session, 80001, "OSD crashes on bluestore cache trim",
+           "osd segfault during bluestore cache trim under load")
+    session.add(Issue(id=60001, subject="OSD segfault in bluestore cache trim",
+                      description="osd crashes bluestore cache trim under heavy load",
+                      is_open=False, status="Resolved",
+                      content_hash=content_hash("dup"),
+                      url="https://tracker.ceph.com/issues/60001"))
+    _issue(session, 70002, "rgw multisite sync stuck",
+           "radosgw multisite replication stall")
+    session.commit()
+    refresh_embeddings(session)
+
+    monkeypatch.setenv("DUPLICATE_MIN_SIMILARITY", "0.5")  # hash-embedder scale
+    get_settings.cache_clear()
+    try:
+        dups = similar_trackers_for_issue(session, session.get(Issue, 80001), floor=0.1)
+        none = similar_trackers_for_issue(session, session.get(Issue, 70002), floor=0.1)
+    finally:
+        get_settings.cache_clear()
+
+    assert [d.issue.id for d in dups] == [60001]
+    assert dups[0].issue.is_open is False  # closed trackers are included
+    assert none == []  # unrelated issue stays quiet
+
+
 def test_pr_reference_parsing_from_description_and_field():
     from app.text import parse_referenced_pr_numbers
 
@@ -98,6 +151,39 @@ def test_pr_reference_parsing_from_description_and_field():
     assert parse_referenced_pr_numbers(desc, None) == [46912]
     cf = [{"name": "Pull request ID", "value": "51234"}]
     assert parse_referenced_pr_numbers(None, cf) == [51234]
+
+
+def test_two_hop_surfaces_similar_trackers_linked_pr(session, monkeypatch):
+    # Two-hop retrieval: this tracker has no PR of its own, but a very similar
+    # tracker DOES have a recorded fix -- that PR should surface first, labeled
+    # with the tracker it came via.
+    from app.config import get_settings
+
+    _issue(session, 77219, "Measure BlueStore caches performance",
+           "measure bluestore cache perf counters hit miss")
+    _issue(session, 77226, "Performance counters for ObjectStore interface",
+           "bluestore perf counters measure cache interface")
+    _pr(session, "PR_SIB", 70200, "os/bluestore: add perf counters",
+        "Fixes: https://tracker.ceph.com/issues/77226", referenced=[77226],
+        state="merged")
+    session.commit()
+    refresh_embeddings(session)
+
+    # Hash-embedder cosines sit lower than Granite's, so drop the two-hop bar.
+    monkeypatch.setenv("RELATED_VIA_ISSUE_MIN_SIMILARITY", "0.2")
+    get_settings.cache_clear()
+    try:
+        rel = related_prs_for_issue(
+            session, session.get(Issue, 77219), min_similarity=0.99, floor=0.1
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert rel, "expected the sibling tracker's PR to surface"
+    assert rel[0].pr.number == 70200
+    assert rel[0].relationship == "suggested"
+    assert rel[0].via_issue_id == 77226
+    assert "ObjectStore" in (rel[0].via_issue_subject or "")
 
 
 def test_similar_unlinked_pr_is_suggested(session):

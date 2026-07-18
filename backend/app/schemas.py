@@ -107,12 +107,18 @@ class RecommendIn(BaseModel):
 
     user: str | None = None  # signed-in identity; loads that saved profile
     skill_prompt: str | None = None
+    # Free-text / tracker search. When set, ranks by this query instead of the
+    # profile (e.g. "performance counters for bluestore" or "like tracker 77219").
+    query: str | None = None
     projects: list[str] | None = None
     trackers: list[str] | None = None
     priorities: list[str] | None = None
     limit: int = 15
     # Recommend work already being handled by a PR? Off by default.
     include_in_progress: bool = False
+    # Search only: narrow to open, unassigned, not-in-progress work. Off by
+    # default so a search finds everything relevant (any state, claimed or not).
+    only_unclaimed: bool = False
 
 
 class RecommendationOut(BaseModel):
@@ -126,6 +132,9 @@ class RecommendationOut(BaseModel):
     priority: str | None = None
     project_name: str | None = None
     url: str | None = None
+    # Claim status -- so search results can flag work that isn't actually free.
+    assignee: str | None = None
+    has_linked_pr: bool = False
 
 
 class RelatedPrOut(BaseModel):
@@ -140,6 +149,25 @@ class RelatedPrOut(BaseModel):
     pr_title: str | None = None
     pr_url: str | None = None
     state: str
+    # Two-hop suggestions: this PR is linked to a similar tracker (not matched
+    # directly), so the UI can say "via similar tracker #NNN".
+    via_issue_id: int | None = None
+    via_issue_subject: str | None = None
+
+
+class SimilarIssueOut(BaseModel):
+    """A tracker highly similar to the one being viewed (possible duplicate)."""
+
+    issue_id: int
+    subject: str | None = None
+    url: str | None = None
+    project_name: str | None = None
+    tracker_name: str | None = None
+    status: str | None = None
+    is_open: bool
+    assignee: str | None = None
+    similarity: float
+    confidence: float  # calibrated 0..1
 
 
 class InProgressOut(BaseModel):
@@ -172,8 +200,11 @@ class HealthOut(BaseModel):
     status: str
     db_ok: bool
     embedder: str
+    reranker: str
     watsonx_configured: bool
     issues: int
     pull_requests: int
     pending_suggestions: int
+    snapshot_cache: dict[str, object] = {}
+    embed_cache: dict[str, int] = {}
     jobs: list[JobInfo]

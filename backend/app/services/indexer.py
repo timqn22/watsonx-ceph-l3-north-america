@@ -85,4 +85,7 @@ def refresh_embeddings(session: Session, embedder: Embedder | None = None) -> in
     session.commit()
     if total:
         logger.info("refresh_embeddings: embedded %s rows via %s", total, embedder.model_id)
+        from ..ai.index_cache import invalidate
+
+        invalidate()  # embeddings changed -> drop the cached snapshot
     return total

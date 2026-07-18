@@ -20,8 +20,9 @@ import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..ai.index_cache import get_snapshot
 from ..config import get_settings
-from ..models import Issue, PullRequest
+from ..models import PullRequest
 
 
 @dataclass
@@ -42,45 +43,45 @@ def in_progress_map(
     if min_similarity is None:
         min_similarity = get_settings().in_progress_min_similarity
 
-    open_issue_ids = set(
-        session.scalars(select(Issue.id).where(Issue.is_open.is_(True)))
-    )
+    snap = get_snapshot(session)
+    # The snapshot now holds all issues; "in progress" only concerns open ones.
+    open_issue_ids = {
+        iid for iid, is_open in zip(snap.issue_ids, snap.issue_is_open) if is_open
+    }
+
+    # PR objects are needed as evidence; fetch the open ones once (cheap vs the
+    # embedding matrices, which come from the cached snapshot).
     open_prs = list(
-        session.scalars(
-            select(PullRequest).where(PullRequest.state == "open")
-        )
+        session.scalars(select(PullRequest).where(PullRequest.state == "open"))
     )
+    pr_by_id = {p.id: p for p in open_prs}
 
     evidence: dict[int, WorkEvidence] = {}
 
-    # 1) Definite: PR body references the issue.
+    # 1) Definite: a PR body references the issue.
     for pr in open_prs:
         for iid in pr.referenced_issue_ids or []:
             if iid in open_issue_ids and iid not in evidence:
                 evidence[iid] = WorkEvidence("referenced", pr, None)
 
-    # 2) Likely: strong embedding similarity (only for issues not already
-    #    referenced, and only using embedded rows).
-    issues = list(
-        session.scalars(
-            select(Issue)
-            .where(Issue.is_open.is_(True))
-            .where(Issue.embedding.is_not(None))
-        )
-    )
-    prs = [p for p in open_prs if p.embedding is not None]
-    if issues and prs:
-        issue_mat = np.asarray([i.embedding for i in issues], dtype=np.float32)
-        pr_mat = np.asarray([p.embedding for p in prs], dtype=np.float32)
-        sims = issue_mat @ pr_mat.T  # unit vectors -> cosine
+    # 2) Likely: strong embedding similarity (issues not already referenced).
+    #    The snapshot holds all issues; only open ones can be "in progress", so
+    #    matmul just those rows (keeps this off the closed-issue count).
+    open_rows = [k for k, op in enumerate(snap.issue_is_open) if op]
+    if open_rows and snap.pr_mat.size:
+        open_mat = snap.issue_mat[open_rows]
+        sims = open_mat @ snap.pr_mat.T  # unit vectors -> cosine
         best_pr = np.argmax(sims, axis=1)
-        best_val = sims[np.arange(len(issues)), best_pr]
-        for row, issue in enumerate(issues):
-            if issue.id in evidence:
+        best_val = sims[np.arange(len(open_rows)), best_pr]
+        for i, row in enumerate(open_rows):
+            issue_id = snap.issue_ids[row]
+            if issue_id in evidence:
                 continue
-            score = float(best_val[row])
+            score = float(best_val[i])
             if score >= min_similarity:
-                evidence[issue.id] = WorkEvidence("match", prs[best_pr[row]], score)
+                pr = pr_by_id.get(snap.pr_ids[int(best_pr[i])])
+                if pr is not None:
+                    evidence[issue_id] = WorkEvidence("match", pr, score)
 
     return evidence
 

@@ -52,10 +52,46 @@ class Settings(BaseSettings):
     # score ~0.7 because they share jargon). We subtract this floor and rescale
     # so the *displayed* confidence is meaningful; cos<=floor -> 0% confidence.
     similarity_floor: float = 0.70
-    # Only surface a "possible match" PR on an issue page above this raw cosine,
-    # and never show more than this many.
-    related_pr_min_similarity: float = 0.80
+    # Only surface a "possible match" PR on an issue page above this raw cosine.
+    # Issue<->PR pairs (problem vs fix) score lower than issue<->issue, so this
+    # sits just above the calibration floor: weak matches still appear but show
+    # an honest low confidence rather than being hidden. Raise it toward 0.80 if
+    # the "possible matches" feel noisy; lower toward the floor to see more.
+    related_pr_min_similarity: float = 0.74
     related_pr_limit: int = 3
+    # Two-hop related PRs: only trackers at least this similar (issue<->issue
+    # cosine, the strong signal) contribute their linked PRs as suggestions.
+    related_via_issue_min_similarity: float = 0.80
+    # Possible-duplicate warning on issue pages: only trackers above this
+    # issue<->issue cosine are flagged. High bar on purpose -- a duplicate
+    # warning must be high-precision or people stop trusting it.
+    duplicate_min_similarity: float = 0.88
+    duplicate_limit: int = 3
+
+    # --- Hybrid scoring weights (content stays the base; these add bounded
+    #     structural boosts/penalties). Grid-searched with scripts/tune_weights.py
+    #     against 34k real #ref links: this combo scores 70.0% top-1 (vs 68.5% at
+    #     the old 0.20/0.05/0.10). The branch match dominates; component is weak. ---
+    # A tracker number encoded in the PR's head branch (near-decisive link).
+    hybrid_branch_weight: float = 0.30
+    # PR and issue point at the same Ceph subsystem/component (weak signal).
+    hybrid_component_weight: float = 0.03
+    # PR and issue clearly point at different components (precision penalty).
+    hybrid_component_penalty: float = 0.05
+    # Recommendations: boost issues in the user's historical components so
+    # familiar-area work ranks higher even in a broad search. Content-primary.
+    rec_component_weight: float = 0.05
+    # Search: hybrid lexical + semantic. Weight of the title keyword-overlap
+    # score added to the embedding cosine, so an exact-title match isn't buried
+    # by dense similarity. 0 = pure semantic.
+    search_lexical_weight: float = 0.5
+
+    # --- Cross-encoder reranking (precision stage over the top-K) ---
+    # Off by default; needs a one-time model download and adds latency.
+    rerank_enabled: bool = False
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    rerank_top_k: int = 25  # how many embedding candidates to rerank
+    rerank_min_score: float = 0.10  # drop candidates below this relevance
     sync_open_minutes: int = 15
     sync_closed_hours: int = 6
     max_issues: int = 2000

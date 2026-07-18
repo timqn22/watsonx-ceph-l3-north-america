@@ -33,19 +33,37 @@
     return n;
   }
 
-  function mountPanel(title, subtitle) {
+  function mountPanel(title, subtitle, storageKey) {
     const host = document.querySelector("#content") || document.body;
     const panel = el("div", { class: "ta-panel" });
+    const chevron = el("span", { class: "ta-chevron" }, "▾"); // ▾
     const header = el(
       "div",
-      { class: "ta-head" },
+      { class: "ta-head ta-clickable", title: "Click to collapse / expand" },
+      chevron,
       el("span", { class: "ta-logo" }, "TrackerAssist"),
       el("span", { class: "ta-title" }, title)
     );
-    panel.append(header);
-    if (subtitle) panel.append(el("div", { class: "ta-sub" }, subtitle));
+    // Everything collapsible lives in one wrapper so the header stays visible.
+    const wrap = el("div", { class: "ta-wrap" });
+    if (subtitle) wrap.append(el("div", { class: "ta-sub" }, subtitle));
     const bodyEl = el("div", { class: "ta-body" });
-    panel.append(bodyEl);
+    wrap.append(bodyEl);
+    panel.append(header, wrap);
+
+    const setCollapsed = (c) => {
+      panel.classList.toggle("ta-collapsed", c);
+      chevron.textContent = c ? "▸" : "▾"; // ▸ / ▾
+    };
+    header.addEventListener("click", () => {
+      const c = !panel.classList.contains("ta-collapsed");
+      setCollapsed(c);
+      if (storageKey) chrome.storage.sync.set({ [storageKey]: c });
+    });
+    if (storageKey) {
+      chrome.storage.sync.get([storageKey], (r) => setCollapsed(!!r[storageKey]));
+    }
+
     host.insertBefore(panel, host.firstChild);
     return bodyEl;
   }
@@ -65,26 +83,81 @@
   }
 
   // ---- Issue page: related pull requests -------------------------------
+  // Possible-duplicate warning: renders only when the backend flags trackers
+  // above the high-precision duplicate bar, so it stays quiet almost always.
+  function renderDuplicates(dupBox, dups) {
+    if (!dups || !dups.length) return;
+    const list = el("div", { class: "ta-duplist" });
+    for (const d of dups) {
+      list.append(
+        el(
+          "div",
+          { class: "ta-duprow" },
+          el(
+            "a",
+            { href: d.url || "#", target: "_blank", class: "ta-link" },
+            `#${d.issue_id} ${d.subject || ""}`
+          ),
+          el(
+            "span",
+            { class: "ta-tag" },
+            d.is_open ? (d.status || "open") : (d.status || "closed")
+          ),
+          el("span", { class: "ta-dupsim" }, `${pct(d.confidence)}% similar`)
+        )
+      );
+    }
+    dupBox.replaceChildren(
+      el(
+        "div",
+        { class: "ta-dupbox" },
+        el(
+          "div",
+          { class: "ta-duphead" },
+          "⚠ Possible duplicate — a very similar tracker already exists:"
+        ),
+        list
+      )
+    );
+  }
+
   async function issuePanel(base, issueId) {
     const body = mountPanel(
       "Related pull requests",
-      "PRs already linked to this tracker, plus likely matches."
+      "PRs already linked to this tracker, plus likely matches.",
+      "collapsed_related"
     );
-    banner(body, "Loading…");
+    const dupBox = el("div");
+    const prList = el("div");
+    body.append(dupBox, prList);
+    banner(prList, "Loading…");
+    // Duplicate check runs in parallel and renders independently, so it shows
+    // even when there are no related PRs (and vice versa).
+    api(base, `/issues/${issueId}/similar`)
+      .then((dups) => renderDuplicates(dupBox, dups))
+      .catch(() => {});
+    // Scan the rendered page (description, custom fields, AND comments) for
+    // GitHub PR links, so a PR referenced only in a comment still counts.
+    const prNums = new Set();
+    document.querySelectorAll('a[href*="/pull/"]').forEach((a) => {
+      const m = (a.getAttribute("href") || "").match(/\/pull\/(\d+)/);
+      if (m) prNums.add(m[1]);
+    });
+    const q = prNums.size ? `?pr_numbers=${[...prNums].join(",")}` : "";
     let items;
     try {
-      items = await api(base, `/issues/${issueId}/related-prs`);
+      items = await api(base, `/issues/${issueId}/related-prs${q}`);
     } catch (e) {
-      return banner(body, "Backend offline — check the TrackerAssist popup.");
+      return banner(prList, "Backend offline — check the TrackerAssist popup.");
     }
     if (!items.length) {
       return banner(
-        body,
+        prList,
         "No related pull requests in the scraped data. If the PR is merged, " +
           "it may not be synced yet (closed PRs sync every 6h)."
       );
     }
-    body.replaceChildren();
+    prList.replaceChildren();
     for (const s of items) {
       const linked = s.relationship === "linked";
       const conf = pct(s.confidence != null ? s.confidence : s.similarity);
@@ -111,7 +184,22 @@
           )
         );
       }
-      body.append(
+      // Two-hop suggestion: this PR is the recorded fix of a similar tracker.
+      if (!linked && s.via_issue_id) {
+        tags.append(
+          el(
+            "a",
+            {
+              class: "ta-tag ta-via",
+              href: `${location.origin}/issues/${s.via_issue_id}`,
+              target: "_blank",
+              title: s.via_issue_subject || "",
+            },
+            `via similar tracker #${s.via_issue_id}`
+          )
+        );
+      }
+      prList.append(
         el(
           "div",
           { class: "ta-card" },
@@ -224,7 +312,8 @@
   async function recommendPanel(base, settingsUser) {
     const body = mountPanel(
       "Recommended for you",
-      "Open issues ranked to your profile — already-in-progress work is hidden."
+      "Open issues ranked to your profile. Claimed work (PR or assignee) is hidden — untick “hide claimed” to show it (tagged).",
+      "collapsed_recommend"
     );
 
     const rUser = currentRedmineUser();
@@ -310,8 +399,28 @@
       refresh,
       rederive
     );
+    // Search box: free text and/or "tracker NNNNN". Works alongside the filters.
+    const search = el("input", {
+      class: "ta-search",
+      type: "search",
+      placeholder: 'Search — e.g. "performance counters for bluestore" or "like tracker 77219"',
+    });
+    // Search finds anything (any state, claimed or not); this narrows to open,
+    // unassigned, not-in-progress work.
+    const unclaimed = el("input", { type: "checkbox", class: "ta-check" });
+    const unclaimedLabel = el(
+      "label",
+      { class: "ta-checklabel", title: "Hide issues that already have a linked PR or an assignee" },
+      unclaimed,
+      " hide claimed"
+    );
+    const searchRow = el("div", { class: "ta-searchrow" }, search, unclaimedLabel);
+    // Restore the saved preference; default ON so recommendations are curated
+    // (claimed work hidden) out of the box. Untick to reveal claimed trackers.
+    const savedHide = (await storageGet(["hideClaimed"])).hideClaimed;
+    unclaimed.checked = savedHide === undefined ? true : !!savedHide;
     const results = el("div", { class: "ta-results" });
-    body.append(note, controls, results);
+    body.append(note, searchRow, controls, results);
 
     function describeMode(m) {
       if (m.mode === "auto")
@@ -323,36 +432,7 @@
       else note.textContent = `Signed in as ${user}.`;
     }
 
-    const load = async (force) => {
-      banner(results, force ? "Rebuilding from your activity…" : "Ranking issues…");
-      const mode = await ensureProfile(force);
-      describeMode(mode);
-      if (mode.mode === "none") return banner(results, "");
-      banner(results, "Ranking issues…");
-      // Empty selection -> null, so the backend narrows to your saved areas by
-      // default. A non-empty selection scopes the ranking to those values.
-      const orNull = (a) => (a.length ? a : null);
-      const priorities = orNull(priorityFilter.selected());
-      const projects = orNull(projectFilter.selected());
-      const trackers = orNull(trackerFilter.selected());
-      let recs;
-      try {
-        recs = await api(base, "/recommendations/issues", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user, priorities, projects, trackers, limit: 12 }),
-        });
-      } catch (e) {
-        return banner(
-          results,
-          e.message.indexOf("422") >= 0
-            ? "Your profile has no skills yet — add them in the popup."
-            : "Backend offline — check the TrackerAssist popup."
-        );
-      }
-      if (!recs.length) {
-        return banner(results, "No matching open issues. Try a different priority.");
-      }
+    function renderRecs(recs) {
       results.replaceChildren();
       for (const d of recs) {
         const tags = el("div", { class: "ta-tags" });
@@ -360,6 +440,11 @@
           if (t) tags.append(el("span", { class: "ta-tag" }, t));
         }
         if (d.is_stretch) tags.append(el("span", { class: "ta-tag ta-stretch" }, "stretch pick"));
+        // Claim status: warn when this isn't actually free work.
+        if (d.has_linked_pr)
+          tags.append(el("span", { class: "ta-tag ta-claimed" }, "PR linked"));
+        if (d.assignee)
+          tags.append(el("span", { class: "ta-tag ta-claimed" }, `assigned: ${d.assignee}`));
         results.append(
           el(
             "div",
@@ -384,8 +469,87 @@
           )
         );
       }
+    }
+
+    const load = async (force) => {
+      // Empty selection -> null, so the backend narrows to your saved areas by
+      // default. A non-empty selection scopes the ranking to those values.
+      const orNull = (a) => (a.length ? a : null);
+      const priorities = orNull(priorityFilter.selected());
+      const projects = orNull(projectFilter.selected());
+      const trackers = orNull(trackerFilter.selected());
+      const query = (search.value || "").trim();
+
+      // Search mode: rank by the typed query instead of the profile. No profile
+      // needed, and the same filters still apply.
+      if (query) {
+        note.textContent =
+          `Search: “${query}”` +
+          (priorities || projects || trackers ? " · filtered" : "");
+        banner(results, "Searching…");
+        let recs;
+        try {
+          recs = await api(base, "/recommendations/issues", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user, query, priorities, projects, trackers, limit: 12,
+              only_unclaimed: unclaimed.checked,
+            }),
+          });
+        } catch (e) {
+          return banner(results, "Backend offline — check the TrackerAssist popup.");
+        }
+        if (!recs.length) return banner(results, "No matching issues for that search.");
+        return renderRecs(recs);
+      }
+
+      banner(results, force ? "Rebuilding from your activity…" : "Ranking issues…");
+      const mode = await ensureProfile(force);
+      describeMode(mode);
+      if (mode.mode === "none") return banner(results, "");
+      banner(results, "Ranking issues…");
+      let recs;
+      try {
+        recs = await api(base, "/recommendations/issues", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user, priorities, projects, trackers, limit: 12,
+            only_unclaimed: unclaimed.checked,
+          }),
+        });
+      } catch (e) {
+        return banner(
+          results,
+          e.message.indexOf("422") >= 0
+            ? "Your profile has no skills yet — add them in the popup."
+            : "Backend offline — check the TrackerAssist popup."
+        );
+      }
+      if (!recs.length) {
+        return banner(results, "No matching open issues. Try a different priority.");
+      }
+      renderRecs(recs);
     };
 
+    // Enter runs the search immediately; typing debounces; clearing the box
+    // (the little x, or empty + Enter) falls back to profile recommendations.
+    let searchTimer = null;
+    search.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        clearTimeout(searchTimer);
+        load(false);
+      }
+    });
+    search.addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => load(false), 450);
+    });
+    unclaimed.addEventListener("change", () => {
+      chrome.storage.sync.set({ hideClaimed: unclaimed.checked });
+      load(false);
+    });
     refresh.addEventListener("click", () => load(false));
     rederive.addEventListener("click", (e) => {
       e.preventDefault();

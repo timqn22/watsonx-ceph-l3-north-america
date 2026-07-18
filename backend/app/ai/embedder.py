@@ -56,15 +56,23 @@ class _CachingMixin:
 
     def __init__(self) -> None:
         self._cache: dict[str, list[float]] = {}
+        self._hits = 0
+        self._misses = 0
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         missing = [t for t in texts if _cache_key(t) not in self._cache]
+        self._hits += len(texts) - len(missing)
+        self._misses += len(missing)
         # De-duplicate before hitting the model.
         for t, vec in zip(
             dict.fromkeys(missing), self._embed_impl(list(dict.fromkeys(missing)))
         ):
             self._cache[_cache_key(t)] = vec
         return [self._cache[_cache_key(t)] for t in texts]
+
+    def cache_stats(self) -> dict[str, int]:
+        """Embedding cache hits/misses this process (identical text embedded once)."""
+        return {"hits": self._hits, "misses": self._misses, "size": len(self._cache)}
 
 
 class HashEmbedder(_CachingMixin):
