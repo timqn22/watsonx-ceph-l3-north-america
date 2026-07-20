@@ -10,13 +10,51 @@ The project lives in **[`backend/`](./backend)** — a FastAPI service with the
 scraping, embedding, and linkage pipeline. Start with
 **[`backend/README.md`](./backend/README.md)**.
 
-## Quick start
+## Quick demo (pre-built database — no scraping needed)
+
+**Step 1** — Get the `trackerassist.db` file from Emily (shared via Drive/Slack) and place it at `backend/trackerassist.db`.
+
+**Step 2** — Clone and install (Python 3.11 or 3.12 recommended):
+
+```bash
+git clone https://github.com/timqn22/watsonx-ceph-l3-north-america.git
+cd watsonx-ceph-l3-north-america
+git checkout emi-test-branch
+cd backend
+pip install -r requirements.txt
+pip install sentence-transformers
+```
+
+**Step 3** — Create `backend/.env` with these exact contents (no changes needed):
+
+```
+EMBEDDER_BACKEND=local
+LOCAL_EMBED_MODEL=ibm-granite/granite-embedding-278m-multilingual
+RERANK_ENABLED=false
+MAX_ISSUES=0
+MAX_PULLS=0
+```
+
+**Step 4** — Start the server:
+
+```bash
+cd backend
+uvicorn app.main:app --reload
+```
+
+Open http://localhost:8000/health — `issues` count should be above zero.
+
+**Step 5** — Load the extension: go to `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select the `extension/` folder.
+
+**Step 6** — Visit any Ceph issue, e.g. https://tracker.ceph.com/issues/68000 — the TrackerAssist panel appears at the top of the page.
+
+## Quick start (from scratch)
 
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-pytest                       # 6 passing, no credentials needed
+pytest                       # passing, no credentials needed
 uvicorn app.main:app --reload
 curl localhost:8000/health
 ```
