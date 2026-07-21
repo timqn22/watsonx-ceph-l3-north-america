@@ -25,17 +25,6 @@ class Settings(BaseSettings):
     # --- Database ---
     database_url: str = "sqlite:///./trackerassist.db"
 
-    # --- Security ---
-    # Comma-separated list of allowed CORS origins. Default is localhost only.
-    # In production set this to the actual extension origin(s) and dashboard host.
-    # Example: chrome-extension://abcdefg,https://trackerassist.example.com
-    cors_origins: str = "http://localhost,http://127.0.0.1"
-
-    # Shared API key for the extension<->backend trust boundary. When set, all
-    # mutating endpoints and profile reads require an `X-Api-Key: <value>` header
-    # or `?api_key=<value>` query param. Blank = open (fine for local dev only).
-    api_key: str | None = None
-
     # --- Redmine ---
     redmine_url: str = "https://tracker.ceph.com"
     redmine_api_key: str | None = None
@@ -124,11 +113,6 @@ class Settings(BaseSettings):
     def github_repo_list(self) -> list[str]:
         """Parse GITHUB_REPOS into a clean list of ``owner/name`` strings."""
         return [r.strip() for r in self.github_repos.split(",") if r.strip()]
-
-    @property
-    def cors_origin_list(self) -> list[str]:
-        """Parse CORS_ORIGINS into a list of allowed origins."""
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
     def watsonx_configured(self) -> bool:

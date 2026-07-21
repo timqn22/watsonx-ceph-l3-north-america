@@ -16,15 +16,13 @@ function normalizeBackend(url) {
 }
 
 // Load saved settings, then hydrate the profile fields from the backend.
-chrome.storage.sync.get(["backendUrl", "userId", "apiKey"], async (cfg) => {
+chrome.storage.sync.get(["backendUrl", "userId"], async (cfg) => {
   $("backendUrl").value = cfg.backendUrl || "http://localhost:8000";
   $("userId").value = cfg.userId || "";
-  $("apiKey").value = cfg.apiKey || "";
   if (!cfg.userId) return;
   try {
     const base = normalizeBackend(cfg.backendUrl);
-    const headers = cfg.apiKey ? { "X-Api-Key": cfg.apiKey } : {};
-    const r = await fetch(`${base}/profiles/${encodeURIComponent(cfg.userId)}`, { headers });
+    const r = await fetch(`${base}/profiles/${encodeURIComponent(cfg.userId)}`);
     if (!r.ok) return;
     const p = await r.json();
     $("displayName").value = p.display_name || "";
@@ -40,8 +38,7 @@ chrome.storage.sync.get(["backendUrl", "userId", "apiKey"], async (cfg) => {
 $("save").addEventListener("click", async () => {
   const backendUrl = normalizeBackend($("backendUrl").value);
   const userId = $("userId").value.trim();
-  const apiKey = $("apiKey").value.trim();
-  chrome.storage.sync.set({ backendUrl, userId, apiKey });
+  chrome.storage.sync.set({ backendUrl, userId });
 
   if (!userId) {
     setStatus("Saved connection. Add an ID to save a profile.", true);
@@ -56,11 +53,9 @@ $("save").addEventListener("click", async () => {
     preferred_priorities: null,
   };
   try {
-    const headers = { "Content-Type": "application/json" };
-    if (apiKey) headers["X-Api-Key"] = apiKey;
     const r = await fetch(`${backendUrl}/profiles/${encodeURIComponent(userId)}`, {
       method: "PUT",
-      headers,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     if (!r.ok) throw new Error("HTTP " + r.status);
