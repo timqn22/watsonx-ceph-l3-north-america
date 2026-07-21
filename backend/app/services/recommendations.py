@@ -36,9 +36,11 @@ _STOP = {
     "know", "good", "well", "comfortable", "familiar", "experience", "level",
 }
 
-# Fit-score band (0-100) from which "stretch" growth picks are drawn.
-_STRETCH_LOW = 55
-_STRETCH_HIGH = 80
+# Similarity band from which "stretch" growth picks are drawn. These are raw
+# cosine fractions of the top candidate's similarity: 0.55–0.85 of top_sim
+# puts them clearly below the primary cut but still meaningfully related.
+_STRETCH_FRAC_LOW = 0.55
+_STRETCH_FRAC_HIGH = 0.85
 
 
 @dataclass
@@ -226,16 +228,27 @@ def recommend_issues(
     order = np.argsort(-sims)
     ranked = [(snap.issue_ids[idxs[o]], float(sims[o])) for o in order]
 
-    # FIT is shown relative to the best available match: the strongest issue
-    # reads high and weaker ones taper, which is far more intuitive than a bare
-    # Granite cosine (~0.3-0.5) rendered as a tiny "30% fit". Raw cosine is kept
-    # as `similarity`. `_fit(sim)` maps the top candidate to ~100 and scales down.
+    # FIT is shown relative to the best available match. We map the visible
+    # range [bottom_sim..top_sim] → [FIT_FLOOR..100] so every returned item
+    # shows a meaningful, differentiated score. Without a floor, the last pick
+    # in a tight cluster scores near 0 even though it's a genuine match.
+    # FIT_FLOOR = 30 means the weakest primary always reads at least 30.
+    _FIT_FLOOR = 30
     top_sim = ranked[0][1] if ranked else 0.0
+    # Use the sim of the last primary as the bottom anchor (or top if only one).
+    bottom_sim = ranked[min(limit - 1, len(ranked) - 1)][1] if ranked else 0.0
 
     def _fit(sim: float) -> int:
         if top_sim <= 0:
             return 0
-        return int(np.clip(round(100.0 * max(0.0, sim) / top_sim), 0, 100))
+        span = top_sim - bottom_sim
+        if span <= 0:
+            # All candidates have identical similarity → all read 100.
+            return 100 if sim >= top_sim * 0.99 else _FIT_FLOOR
+        return int(np.clip(
+            round(_FIT_FLOOR + (100 - _FIT_FLOOR) * (sim - bottom_sim) / span),
+            _FIT_FLOOR, 100,
+        ))
 
     # Precision stage: if a cross-encoder is enabled, re-rank the top embedding
     # candidates by reading the skill text against each issue. Fit then reflects
@@ -248,13 +261,21 @@ def recommend_issues(
             skill_prompt,
             [issue_embed_text(r.subject, r.description) if r else "" for _, _, r in rows],
         )
-        # Show fit relative to the best reranked match, exactly like the non-rerank
-        # path -- otherwise a domain-mismatched cross-encoder (relevance ~0.02)
-        # renders every pick as "0 fit". Top pick reads ~100 and tapers down.
+        # Show fit relative to the best reranked match. Same floor logic as the
+        # non-rerank path so the score range is always [FIT_FLOOR..100].
         rr_top = max(rr) if rr else 0.0
+        rr_bottom = min(rr) if rr else 0.0
 
         def _rr_fit(x: float) -> int:
-            return int(np.clip(round(100.0 * x / rr_top), 0, 100)) if rr_top > 0 else 0
+            if rr_top <= 0:
+                return 0
+            rr_span = rr_top - rr_bottom
+            if rr_span <= 0:
+                return 100 if x >= rr_top * 0.99 else _FIT_FLOOR
+            return int(np.clip(
+                round(_FIT_FLOOR + (100 - _FIT_FLOOR) * (x - rr_bottom) / rr_span),
+                _FIT_FLOOR, 100,
+            ))
 
         out: list[Recommendation] = []
         for pos, i in enumerate(sorted(range(len(rows)), key=lambda i: -rr[i])):
@@ -280,7 +301,7 @@ def recommend_issues(
     for iid, sim in ranked[limit:]:
         if len(stretch_sel) >= stretch:
             break
-        if _STRETCH_LOW <= _fit(sim) < _STRETCH_HIGH and iid not in chosen:
+        if _STRETCH_FRAC_LOW <= (sim / top_sim if top_sim > 0 else 0) < _STRETCH_FRAC_HIGH and iid not in chosen:
             stretch_sel.append((iid, sim))
 
     selected = [(iid, sim, False) for iid, sim in primary]
