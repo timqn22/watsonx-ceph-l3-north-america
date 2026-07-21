@@ -626,6 +626,94 @@
     load(false);
   }
 
+  // ---- Duplicate tracker detection panel ------------------------------
+  async function duplicatePanel(base) {
+    const body = mountPanel(
+      "Duplicate Tracker Detection",
+      "Find groups of similar trackers that may be duplicates.",
+      "collapsed_duplicates"
+    );
+
+    const detectBtn = el("button", { class: "ta-refresh" }, "Generate Duplicate List");
+    const status = el("div", { class: "ta-note" }, "");
+    const results = el("div", { class: "ta-results" });
+    body.append(detectBtn, status, results);
+
+    const load = async () => {
+      status.textContent = "Detecting duplicates...";
+      results.replaceChildren();
+      
+      try {
+        const groups = await api(base, "/duplicates/detect?min_similarity=0.88&limit=20");
+        
+        if (!groups || groups.length === 0) {
+          status.textContent = "No duplicate groups found.";
+          return;
+        }
+        
+        status.textContent = `Found ${groups.length} duplicate group(s)`;
+        results.replaceChildren();
+        
+        for (const [idx, group] of groups.entries()) {
+          const groupDiv = el("div", {
+            class: "ta-card",
+            style: "flex-direction: column; gap: 8px; background: #fdf6e3; border-color: #efd9a8;"
+          });
+          
+          const groupHeader = el("div", {
+            style: "font-weight: 600; color: #9a6b12; margin-bottom: 4px;"
+          }, `Group ${idx + 1} (${group.group_size} trackers, ${pct(group.max_confidence)}% confidence)`);
+          
+          groupDiv.append(groupHeader);
+          
+          for (const [tIdx, tracker] of group.trackers.entries()) {
+            const trackerDiv = el("div", {
+              style: "margin-left: 12px; padding: 6px; background: #fff; border-radius: 4px; border: 1px solid #e4e8ec;"
+            });
+            
+            const trackerLink = el("a", {
+              href: tracker.url || "#",
+              target: "_blank",
+              class: "ta-link"
+            }, `#${tracker.issue_id}: ${tracker.subject || "No subject"}`);
+            
+            const tags = el("div", { class: "ta-tags", style: "margin-top: 4px;" });
+            
+            if (tracker.project_name) {
+              tags.append(el("span", { class: "ta-tag" }, tracker.project_name));
+            }
+            if (tracker.tracker_name) {
+              tags.append(el("span", { class: "ta-tag" }, tracker.tracker_name));
+            }
+            if (tracker.status) {
+              const statusTag = el("span", {
+                class: "ta-tag",
+                style: tracker.is_open ? "color: #1a7f37;" : ""
+              }, tracker.status);
+              tags.append(statusTag);
+            }
+            if (tIdx > 0) {
+              tags.append(el("span", { class: "ta-tag ta-stretch" }, `${pct(tracker.confidence)}% similar`));
+            }
+            if (tracker.assignee) {
+              tags.append(el("span", { class: "ta-tag" }, `Assigned: ${tracker.assignee}`));
+            }
+            
+            trackerDiv.append(trackerLink, tags);
+            groupDiv.append(trackerDiv);
+          }
+          
+          results.append(groupDiv);
+        }
+      } catch (e) {
+        status.textContent = "Backend offline — check the TrackerAssist popup.";
+        results.replaceChildren();
+      }
+    };
+
+    detectBtn.addEventListener("click", () => load());
+  }
+
   // ---- Route ----------------------------------------------------------
   (async function main() {
     const cfg = await storageGet(["backendUrl", "userId"]);
@@ -642,6 +730,7 @@
       /\/projects\/[^/]+\/issues/.test(path)
     ) {
       recommendPanel(base, user);
+      duplicatePanel(base);
     }
   })();
 })();

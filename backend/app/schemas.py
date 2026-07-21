@@ -208,3 +208,11 @@ class HealthOut(BaseModel):
     snapshot_cache: dict[str, object] = {}
     embed_cache: dict[str, int] = {}
     jobs: list[JobInfo]
+
+
+class DuplicateGroupOut(BaseModel):
+    """A group of similar trackers that may be duplicates."""
+
+    trackers: list[SimilarIssueOut]
+    max_confidence: float  # highest confidence in the group
+    group_size: int

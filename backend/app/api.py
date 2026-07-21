@@ -7,15 +7,18 @@ rescrape hook for live demos.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+logger = logging.getLogger(__name__)
+
 from .ai import index_cache
 from .ai.embedder import get_embedder
-from .ai.linkage import related_prs_for_issue, similar_trackers_for_issue
+from .ai.linkage import calibrate, related_prs_for_issue, similar_trackers_for_issue
 from .ai.reranker import get_reranker
 from .ai.scoring import components_for
 from .config import get_settings
@@ -37,6 +40,7 @@ from .schemas import (
     RelatedPrOut,
     SimilarIssueOut,
     RescrapeIn,
+    DuplicateGroupOut,
 )
 from .scheduler import get_scheduler
 from .services.pipeline import run_source
@@ -524,3 +528,156 @@ def rescrape(
         raise HTTPException(422, f"source must be one of {sorted(_VALID_SOURCES)}")
     background.add_task(run_source, body.source, body.full)
     return {"status": "scheduled", "source": body.source, "full": body.full}
+
+
+@router.get("/duplicates/detect", response_model=list[DuplicateGroupOut])
+def detect_duplicates(
+    min_similarity: float = Query(0.88, ge=0.0, le=1.0),
+    limit: int = Query(20, le=100),
+    session: Session = Depends(get_session),
+) -> list[DuplicateGroupOut]:
+    """Find groups of trackers with high similarity (potential duplicates).
+    
+    Returns groups of 2+ trackers that are highly similar to each other.
+    Uses the same similarity threshold as the duplicate warning feature.
+    """
+    logger.info(f"Duplicate detection started: min_similarity={min_similarity}, limit={limit}")
+    settings = get_settings()
+    floor = settings.similarity_floor
+    
+    # Get all issues with embeddings
+    issues = list(
+        session.scalars(
+            select(Issue).where(Issue.embedding.is_not(None))
+        )
+    )
+    
+    logger.info(f"Found {len(issues)} issues with embeddings")
+    
+    if len(issues) < 2:
+        logger.info("Not enough issues with embeddings to detect duplicates")
+        return []
+    
+    # Build similarity matrix
+    import numpy as np
+    logger.info("Building similarity matrix...")
+    embeddings = np.asarray([i.embedding for i in issues], dtype=np.float32)
+    similarity_matrix = embeddings @ embeddings.T
+    logger.info(f"Similarity matrix built: shape={similarity_matrix.shape}")
+    
+    # Find groups of similar trackers using a clique-based approach
+    # Only group trackers that are ALL mutually similar (not just similar to one seed)
+    seen = set()
+    groups: list[DuplicateGroupOut] = []
+    
+    for i, issue in enumerate(issues):
+        if issue.id in seen:
+            continue
+            
+        # Find all trackers similar to this one
+        candidates = [i]  # Start with the seed tracker
+        candidate_sims = []  # Track all pairwise similarities for quality check
+        
+        for j in range(len(issues)):
+            if i == j:
+                continue
+                
+            raw_sim = similarity_matrix[i, j]
+            other = issues[j]
+            
+            # Metadata filtering: must match project AND tracker type
+            if (other.project_name != issue.project_name or
+                other.tracker_name != issue.tracker_name):
+                continue
+            
+            if raw_sim >= min_similarity:
+                # Check if this candidate is similar to ALL existing members
+                is_similar_to_all = all(
+                    similarity_matrix[j, k] >= min_similarity for k in candidates
+                )
+                if is_similar_to_all:
+                    # Track all pairwise similarities for this candidate
+                    for k in candidates:
+                        candidate_sims.append(float(similarity_matrix[j, k]))
+                    
+                    candidates.append(j)
+                    logger.info(f"  Added issue #{issues[j].id} to group (raw_sim={raw_sim:.3f}, calibrated={calibrate(raw_sim, floor):.3f})")
+        
+        # Only create a group if we found at least one other similar tracker
+        if len(candidates) < 2:
+            continue
+        
+        # Stricter clique quality check: ensure minimum average similarity
+        # and that the weakest pair is still reasonably strong
+        if candidate_sims:
+            avg_sim = sum(candidate_sims) / len(candidate_sims)
+            min_pair_sim = min(candidate_sims)
+            
+            # Require average similarity >= threshold and weakest pair >= threshold - 0.02
+            if avg_sim < min_similarity or min_pair_sim < (min_similarity - 0.02):
+                logger.info(f"  Rejected group: avg_sim={avg_sim:.3f}, min_pair={min_pair_sim:.3f}")
+                continue
+        
+        # Limit group size to prevent huge clusters (max 8 trackers)
+        if len(candidates) > 8:
+            # Keep only the most similar ones
+            similarities_to_seed = [(similarity_matrix[i, j], j) for j in candidates[1:]]
+            similarities_to_seed.sort(reverse=True)
+            candidates = [i] + [j for _, j in similarities_to_seed[:7]]
+            logger.info(f"  Trimmed group from {len(candidates) + len(similarities_to_seed) - 7} to 8 trackers")
+        
+        logger.info(f"Found clique group with {len(candidates)} mutually similar trackers for issue #{issue.id}")
+        
+        # Build the group
+        group_trackers: list[SimilarIssueOut] = []
+        group_ids = set()
+        max_conf = 0.0
+        
+        # Add all members (seed first)
+        for idx, j in enumerate(candidates):
+            other = issues[j]
+            # For the seed tracker, use 1.0 similarity; for others, use their similarity to the seed
+            if j == i:
+                sim = 1.0
+                conf = 1.0
+            else:
+                sim = float(similarity_matrix[i, j])
+                conf = calibrate(sim, floor)
+                max_conf = max(max_conf, conf)
+            
+            group_trackers.append(
+                SimilarIssueOut(
+                    issue_id=other.id,
+                    subject=other.subject,
+                    url=other.url,
+                    project_name=other.project_name,
+                    tracker_name=other.tracker_name,
+                    status=other.status,
+                    is_open=bool(other.is_open),
+                    assignee=other.assignee_login,
+                    similarity=sim,
+                    confidence=conf,
+                )
+            )
+            group_ids.add(other.id)
+        
+        # Mark all trackers in this group as seen
+        seen.update(group_ids)
+        
+        groups.append(
+            DuplicateGroupOut(
+                trackers=group_trackers,
+                max_confidence=max_conf,
+                group_size=len(group_trackers),
+            )
+        )
+        
+        if len(groups) >= limit:
+            break
+    
+    logger.info(f"Found {len(groups)} duplicate groups total")
+    
+    # Sort by confidence (highest first)
+    groups.sort(key=lambda g: -g.max_confidence)
+    logger.info(f"Returning {min(len(groups), limit)} groups after sorting")
+    return groups[:limit]
