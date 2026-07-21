@@ -16,8 +16,8 @@ python-dotenv>=1.0.0
 
 # --- Optional: local fallback embeddings (no credentials needed) ---
 # Install to use the LocalEmbedder backend for offline dev/demo.
-#   pip install sentence-transformers
-# sentence-transformers>=2.2.2
+# Recommended: provides real Granite embeddings without watsonx credentials.
+sentence-transformers>=2.2.2
 
 # --- Dev/test ---
 pytest>=8.0.0
