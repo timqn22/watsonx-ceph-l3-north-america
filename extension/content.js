@@ -46,10 +46,16 @@
     );
     // Everything collapsible lives in one wrapper so the header stays visible.
     const wrap = el("div", { class: "ta-wrap" });
-    if (subtitle) wrap.append(el("div", { class: "ta-sub" }, subtitle));
+    const subEl = el("div", { class: "ta-sub" }, subtitle || "");
+    if (subtitle) wrap.append(subEl);
     const bodyEl = el("div", { class: "ta-body" });
     wrap.append(bodyEl);
     panel.append(header, wrap);
+    // Expose the subtitle so callers can update it once they know what's shown.
+    bodyEl.setSubtitle = (text) => {
+      subEl.textContent = text || "";
+      if (text && !subEl.parentNode) wrap.insertBefore(subEl, bodyEl);
+    };
 
     const setCollapsed = (c) => {
       panel.classList.toggle("ta-collapsed", c);
@@ -76,10 +82,33 @@
     return Math.round((sim || 0) * 100);
   }
 
-  async function api(base, path, opts) {
-    const r = await fetch(base + path, opts);
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    return r.json();
+  // Fetch with a timeout and a couple of retries for transient failures. The
+  // first request after the backend starts builds the (60k-issue) snapshot, so
+  // it can be slow or briefly 5xx -- retrying avoids a false "Backend offline".
+  // Definitive client errors (4xx, e.g. 422 no-profile) fail immediately.
+  async function api(base, path, opts, { retries = 2, timeoutMs = 25000 } = {}) {
+    let lastErr;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const r = await fetch(base + path, { ...opts, signal: ctrl.signal });
+        clearTimeout(timer);
+        if (r.ok) return r.json();
+        if (r.status >= 400 && r.status < 500) throw new Error("HTTP " + r.status);
+        lastErr = new Error("HTTP " + r.status); // 5xx -> retry
+      } catch (e) {
+        clearTimeout(timer);
+        if (e && typeof e.message === "string" && e.message.startsWith("HTTP 4")) {
+          throw e; // definitive client error -> don't retry
+        }
+        lastErr = e; // network error / timeout / 5xx -> retry
+      }
+      if (attempt < retries) {
+        await new Promise((res) => setTimeout(res, 600 * (attempt + 1)));
+      }
+    }
+    throw lastErr;
   }
 
   // ---- Issue page: related pull requests -------------------------------
@@ -124,7 +153,7 @@
   async function issuePanel(base, issueId) {
     const body = mountPanel(
       "Related pull requests",
-      "PRs already linked to this tracker, plus likely matches.",
+      "Checking for related pull requests…",
       "collapsed_related"
     );
     const dupBox = el("div");
@@ -151,12 +180,24 @@
       return banner(prList, "Backend offline — check the TrackerAssist popup.");
     }
     if (!items.length) {
+      body.setSubtitle("No linked or matching pull requests found for this tracker.");
       return banner(
         prList,
         "No related pull requests in the scraped data. If the PR is merged, " +
           "it may not be synced yet (closed PRs sync every 6h)."
       );
     }
+    // Describe what's actually shown, so we never claim "linked" when these are
+    // only likely matches.
+    const hasLinked = items.some((r) => r.relationship === "linked");
+    const hasSuggested = items.some((r) => r.relationship === "suggested");
+    body.setSubtitle(
+      hasLinked
+        ? hasSuggested
+          ? "Pull requests linked to this tracker, plus likely matches."
+          : "Pull requests linked to this tracker."
+        : "Likely matching pull requests — none are linked to this tracker yet."
+    );
     prList.replaceChildren();
     for (const s of items) {
       const linked = s.relationship === "linked";
@@ -266,7 +307,20 @@
 
   // A reusable multi-select checkbox dropdown. `loadOptions` is an async fn
   // returning [{value, label}]; used for priority, projects, and trackers.
+  // One document-level listener (installed once) closes any open filter dropdown
+  // when the user clicks outside it — clicks inside (on a checkbox) keep it open.
+  function installFilterAutoClose() {
+    if (document.__taFilterAutoClose) return;
+    document.__taFilterAutoClose = true;
+    document.addEventListener("click", (e) => {
+      document.querySelectorAll("details.ta-projfilter[open]").forEach((d) => {
+        if (!d.contains(e.target)) d.open = false;
+      });
+    });
+  }
+
   function buildMultiFilter(labelText, loadOptions, onChange) {
+    installFilterAutoClose();
     const details = el("details", { class: "ta-projfilter" });
     const summary = el("summary", { class: "ta-projsummary" }, labelText);
     const list = el(
@@ -275,6 +329,13 @@
       el("div", { class: "ta-note" }, "Loading…")
     );
     details.append(summary, list);
+    // Opening this filter collapses any other open filter (accordion behavior).
+    details.addEventListener("toggle", () => {
+      if (!details.open) return;
+      document.querySelectorAll("details.ta-projfilter[open]").forEach((d) => {
+        if (d !== details) d.open = false;
+      });
+    });
     const boxes = [];
     const refreshSummary = () => {
       const n = boxes.filter((b) => b.checked).length;
