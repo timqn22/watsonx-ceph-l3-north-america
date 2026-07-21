@@ -165,12 +165,19 @@
     api(base, `/issues/${issueId}/similar`)
       .then((dups) => renderDuplicates(dupBox, dups))
       .catch(() => {});
-    // Scan the rendered page (description, custom fields, AND comments) for
-    // GitHub PR links, so a PR referenced only in a comment still counts.
+    // Scan only the structured fields (description + custom-field table) for
+    // GitHub PR links. Comments are intentionally excluded: a PR mentioned in
+    // a comment as a "related" or "helpful" reference is not a formal link and
+    // would be incorrectly surfaced as "Linked" in the panel.
     const prNums = new Set();
-    document.querySelectorAll('a[href*="/pull/"]').forEach((a) => {
-      const m = (a.getAttribute("href") || "").match(/\/pull\/(\d+)/);
-      if (m) prNums.add(m[1]);
+    const structuredZones = [
+      ...document.querySelectorAll("#issue_description, #attributes"),
+    ];
+    structuredZones.forEach((zone) => {
+      zone.querySelectorAll('a[href*="/pull/"]').forEach((a) => {
+        const m = (a.getAttribute("href") || "").match(/\/pull\/(\d+)/);
+        if (m) prNums.add(m[1]);
+      });
     });
     const q = prNums.size ? `?pr_numbers=${[...prNums].join(",")}` : "";
     let items;
