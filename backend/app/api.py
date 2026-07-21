@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,7 @@ from .schemas import (
     SimilarIssueOut,
     RescrapeIn,
 )
+from .limiter import limiter
 from .scheduler import get_scheduler
 from .services.pipeline import run_source
 from .services.recommendations import (
@@ -51,6 +52,23 @@ router = APIRouter()
 
 _VALID_DECISIONS = {"accepted", "rejected", "ignored"}
 _VALID_SOURCES = {"redmine_open", "redmine_closed", "github_open", "github_closed"}
+
+
+def _require_api_key(
+    x_api_key: str | None = Header(None),
+    api_key: str | None = Query(None),
+) -> None:
+    """FastAPI dependency: enforce the API key when one is configured.
+
+    Accepts the key via `X-Api-Key` header or `?api_key=` query param.
+    When `API_KEY` is not set in config the check is skipped (local dev).
+    """
+    configured = get_settings().api_key
+    if not configured:
+        return  # open in local/dev mode
+    provided = x_api_key or api_key
+    if not provided or provided != configured:
+        raise HTTPException(401, "Missing or invalid API key")
 
 
 def _enrich(session: Session, s: LinkSuggestion) -> LinkSuggestionOut:
@@ -249,19 +267,22 @@ def _apply_profile(profile, body: ProfileIn) -> None:
     profile.skill_embedded_hash = None
 
 
-@router.get("/profiles/me", response_model=ProfileOut)
+@router.get("/profiles/me", response_model=ProfileOut,
+            dependencies=[Depends(_require_api_key)])
 def get_profile(session: Session = Depends(get_session)) -> ProfileOut:
     return ProfileOut.model_validate(get_or_create_profile(session))
 
 
-@router.get("/profiles/{external_id}", response_model=ProfileOut)
+@router.get("/profiles/{external_id}", response_model=ProfileOut,
+            dependencies=[Depends(_require_api_key)])
 def get_profile_by_id(
     external_id: str, session: Session = Depends(get_session)
 ) -> ProfileOut:
     return ProfileOut.model_validate(get_or_create_profile(session, external_id))
 
 
-@router.put("/profiles/me", response_model=ProfileOut)
+@router.put("/profiles/me", response_model=ProfileOut,
+            dependencies=[Depends(_require_api_key)])
 def put_profile(
     body: ProfileIn, session: Session = Depends(get_session)
 ) -> ProfileOut:
@@ -271,7 +292,8 @@ def put_profile(
     return ProfileOut.model_validate(profile)
 
 
-@router.put("/profiles/{external_id}", response_model=ProfileOut)
+@router.put("/profiles/{external_id}", response_model=ProfileOut,
+            dependencies=[Depends(_require_api_key)])
 def put_profile_by_id(
     external_id: str, body: ProfileIn, session: Session = Depends(get_session)
 ) -> ProfileOut:
@@ -285,8 +307,11 @@ def _effective_prompt(skill: str, background: str | None) -> str:
     return "\n\n".join(p for p in (skill, background) if p and p.strip()).strip()
 
 
-@router.post("/recommendations/issues", response_model=list[RecommendationOut])
+@router.post("/recommendations/issues", response_model=list[RecommendationOut],
+             dependencies=[Depends(_require_api_key)])
+@limiter.limit("20/minute")
 def recommend(
+    request: Request,
     body: RecommendIn, session: Session = Depends(get_session)
 ) -> list[RecommendationOut]:
     profile = get_or_create_profile(session, body.user or "me")
@@ -394,8 +419,11 @@ def recommend(
     return out
 
 
-@router.get("/issues/{issue_id}/related-prs", response_model=list[RelatedPrOut])
+@router.get("/issues/{issue_id}/related-prs", response_model=list[RelatedPrOut],
+            dependencies=[Depends(_require_api_key)])
+@limiter.limit("30/minute")
 def related_prs(
+    request: Request,
     issue_id: int,
     pr_numbers: str | None = Query(None),
     session: Session = Depends(get_session),

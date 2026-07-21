@@ -11,6 +11,9 @@
 
   const PRIORITIES = ["Low", "Normal", "High", "Urgent", "Immediate"];
 
+  // Set once in main() from chrome.storage; injected into every api() call.
+  let _apiKey = "";
+
   function storageGet(keys) {
     return new Promise((res) => chrome.storage.sync.get(keys, res));
   }
@@ -92,7 +95,11 @@
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       try {
-        const r = await fetch(base + path, { ...opts, signal: ctrl.signal });
+        const mergedOpts = { ...opts, signal: ctrl.signal };
+        if (_apiKey) {
+          mergedOpts.headers = { "X-Api-Key": _apiKey, ...(mergedOpts.headers || {}) };
+        }
+        const r = await fetch(base + path, mergedOpts);
         clearTimeout(timer);
         if (r.ok) return r.json();
         if (r.status >= 400 && r.status < 500) throw new Error("HTTP " + r.status);
@@ -628,9 +635,10 @@
 
   // ---- Route ----------------------------------------------------------
   (async function main() {
-    const cfg = await storageGet(["backendUrl", "userId"]);
+    const cfg = await storageGet(["backendUrl", "userId", "apiKey"]);
     const base = (cfg.backendUrl || "http://localhost:8000").replace(/\/+$/, "");
     const user = cfg.userId || "";
+    _apiKey = cfg.apiKey || "";
     const path = location.pathname;
 
     const issue = path.match(/\/issues\/(\d+)/);
