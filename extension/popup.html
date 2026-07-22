@@ -7,22 +7,24 @@
   * { box-sizing: border-box; }
   body { width: 340px; margin: 0; padding: 14px 16px;
          font: 13px/1.45 -apple-system, Segoe UI, Roboto, sans-serif;
-         background: #0f1115; color: #e7e9ee; }
+         background: #181c22; color: #c8cdd7; }
   h1 { font-size: 15px; margin: 0 0 2px; }
-  .sub { color: #9aa2b1; font-size: 11px; margin-bottom: 12px; }
-  h2 { font-size: 12px; color: #8b93a3; text-transform: uppercase;
+  .sub { color: #7a8494; font-size: 11px; margin-bottom: 12px; }
+  h2 { font-size: 12px; color: #7a8494; text-transform: uppercase;
        letter-spacing: .04em; margin: 14px 0 6px; }
   label { display: block; color: #9aa2b1; margin: 8px 0 3px; }
-  input, textarea { width: 100%; background: #0f1115; color: #e7e9ee;
-    border: 1px solid #333a47; border-radius: 6px; padding: 7px 9px; font: inherit; }
+  input, textarea { width: 100%; background: #1e222b; color: #c8cdd7;
+    border: 1px solid #2e3545; border-radius: 6px; padding: 7px 9px; font: inherit; }
   textarea { min-height: 54px; resize: vertical; }
-  .accent { color: #7cc5ff; }
-  button { margin-top: 12px; width: 100%; background: #22304a; color: #e7e9ee;
-    border: 1px solid #33507e; border-radius: 6px; padding: 9px; font-size: 13px;
+  .accent { color: #a8cef0; }
+  button { margin-top: 12px; width: 100%; background: #1e2d44; color: #c8cdd7;
+    border: 1px solid #2e4870; border-radius: 6px; padding: 9px; font-size: 13px;
     cursor: pointer; }
-  button:hover { background: #2b3d5e; }
+  button:hover { background: #263858; }
+  button.sm { margin-top: 8px; width: auto; padding: 5px 12px; font-size: 12px; }
+  button.sm:hover { background: #16223a; border-color: #4a86c8; color: #a8cef0; }
   .status { margin-top: 8px; font-size: 12px; min-height: 16px; }
-  .ok { color: #5fd18b; } .err { color: #f2889a; }
+  .ok { color: #5abf82; } .err { color: #d47a8a; }
   hr { border: none; border-top: 1px solid #262a33; margin: 12px 0; }
 </style>
 </head>
@@ -55,7 +57,7 @@
 
   <hr>
   <h2>Duplicate Tracker Detection</h2>
-  <button id="detectDuplicates">Generate Duplicate List</button>
+  <button id="detectDuplicates" class="sm">Generate Duplicate List</button>
   <div class="status" id="duplicateStatus"></div>
   <div id="duplicateResults" style="margin-top: 12px; max-height: 300px; overflow-y: auto;"></div>
 

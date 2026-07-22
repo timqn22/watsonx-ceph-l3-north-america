@@ -634,7 +634,7 @@
       "collapsed_duplicates"
     );
 
-    const detectBtn = el("button", { class: "ta-refresh" }, "Generate Duplicate List");
+    const detectBtn = el("button", { class: "ta-refresh ta-refresh-dup" }, "Generate Duplicate List");
     const status = el("div", { class: "ta-note" }, "");
     const results = el("div", { class: "ta-results" });
     body.append(detectBtn, status, results);
@@ -644,7 +644,7 @@
       results.replaceChildren();
       
       try {
-        const groups = await api(base, "/duplicates/detect?min_similarity=0.88&limit=20");
+        const groups = await api(base, "/duplicates/detect?min_similarity=0.92&limit=20");
         
         if (!groups || groups.length === 0) {
           status.textContent = "No duplicate groups found.";
@@ -655,30 +655,25 @@
         results.replaceChildren();
         
         for (const [idx, group] of groups.entries()) {
-          const groupDiv = el("div", {
-            class: "ta-card",
-            style: "flex-direction: column; gap: 8px; background: #fdf6e3; border-color: #efd9a8;"
-          });
-          
+          const groupDiv = el("div", { class: "ta-card ta-dupgroup" });
+
           const groupHeader = el("div", {
-            style: "font-weight: 600; color: #9a6b12; margin-bottom: 4px;"
+            class: "ta-dupgroup-head"
           }, `Group ${idx + 1} (${group.group_size} trackers, ${pct(group.max_confidence)}% confidence)`);
-          
+
           groupDiv.append(groupHeader);
-          
+
           for (const [tIdx, tracker] of group.trackers.entries()) {
-            const trackerDiv = el("div", {
-              style: "margin-left: 12px; padding: 6px; background: #fff; border-radius: 4px; border: 1px solid #e4e8ec;"
-            });
-            
+            const trackerDiv = el("div", { class: "ta-dupgroup-item" });
+
             const trackerLink = el("a", {
               href: tracker.url || "#",
               target: "_blank",
               class: "ta-link"
             }, `#${tracker.issue_id}: ${tracker.subject || "No subject"}`);
-            
+
             const tags = el("div", { class: "ta-tags", style: "margin-top: 4px;" });
-            
+
             if (tracker.project_name) {
               tags.append(el("span", { class: "ta-tag" }, tracker.project_name));
             }
@@ -686,23 +681,21 @@
               tags.append(el("span", { class: "ta-tag" }, tracker.tracker_name));
             }
             if (tracker.status) {
-              const statusTag = el("span", {
-                class: "ta-tag",
-                style: tracker.is_open ? "color: #1a7f37;" : ""
-              }, tracker.status);
-              tags.append(statusTag);
+              tags.append(el("span", {
+                class: tracker.is_open ? "ta-tag ta-open" : "ta-tag"
+              }, tracker.status));
             }
             if (tIdx > 0) {
-              tags.append(el("span", { class: "ta-tag ta-stretch" }, `${pct(tracker.confidence)}% similar`));
+              tags.append(el("span", { class: "ta-tag ta-via" }, `${pct(tracker.confidence)}% similar`));
             }
             if (tracker.assignee) {
               tags.append(el("span", { class: "ta-tag" }, `Assigned: ${tracker.assignee}`));
             }
-            
+
             trackerDiv.append(trackerLink, tags);
             groupDiv.append(trackerDiv);
           }
-          
+
           results.append(groupDiv);
         }
       } catch (e) {

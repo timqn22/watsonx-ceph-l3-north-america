@@ -121,7 +121,7 @@ $("detectDuplicates").addEventListener("click", async () => {
   $("duplicateResults").innerHTML = '';
   
   try {
-    const r = await fetch(`${backendUrl}/duplicates/detect?min_similarity=0.88&limit=20`);
+    const r = await fetch(`${backendUrl}/duplicates/detect?min_similarity=0.92&limit=20`);
     if (!r.ok) throw new Error("HTTP " + r.status);
     
     const groups = await r.json();

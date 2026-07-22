@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     # Possible-duplicate warning on issue pages: only trackers above this
     # issue<->issue cosine are flagged. High bar on purpose -- a duplicate
     # warning must be high-precision or people stop trusting it.
-    duplicate_min_similarity: float = 0.88
+    duplicate_min_similarity: float = 0.92
     duplicate_limit: int = 3
 
     # --- Hybrid scoring weights (content stays the base; these add bounded
