@@ -36,24 +36,15 @@ ENV/
 # Environment variables
 .env
 
-# ChromaDB
-chroma_db/
-example_db/
+# SQLite (backend default store)
+*.db
+*.sqlite3
 
 # Raw data
 raw_issues/
-*.json
 
 # Logs
 *.log
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Jupyter Notebooks
-.ipynb_checkpoints/
-*.ipynb
 
 # Testing
 .pytest_cache/
@@ -65,4 +56,6 @@ htmlcov/
 .dmypy.json
 dmypy.json
 
-# Made with Bob
+# OS
+.DS_Store
+Thumbs.db

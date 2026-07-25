@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "TrackerAssist for Redmine",
+  "version": "0.1.0",
+  "description": "AI-powered PR <-> tracker links and personalized task recommendations, powered by IBM Granite.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*",
+    "https://tracker.ceph.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "TrackerAssist"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://tracker.ceph.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

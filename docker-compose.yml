@@ -1,0 +1,22 @@
+# One-command demo: `docker compose up --build`, then open http://localhost:8000/health
+#
+# The backend uses a local SQLite file by default, so no database service is
+# required. Configuration comes from backend/.env if present (see
+# backend/.env.example). Uncomment the postgres service and swap DATABASE_URL to
+# scale out later.
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: backend/.env
+        required: false
+    environment:
+      # Persist the SQLite DB on the mounted volume.
+      DATABASE_URL: sqlite:////data/trackerassist.db
+    volumes:
+      - trackerassist_data:/data
+
+volumes:
+  trackerassist_data:
